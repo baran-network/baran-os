@@ -7,6 +7,8 @@ CLAUDE.md
 specs/
 
 # Go
+go.work
+go.work.sum
 bin/
 *.exe
 *.exe~

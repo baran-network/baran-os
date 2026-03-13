@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package agentosprotocol.v1;
+
+option go_package = "github.com/carlosmolina/agent-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+
+// Capability declares an ability of an agent.
+message Capability {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  map<string, string> parameters = 4;
+}
+
+// AgentRegisterPayload is the payload for agent.register events.
+message AgentRegisterPayload {
+  string agent_id = 1;
+  string agent_type = 2;
+  string version = 3;
+  repeated Capability capabilities = 4;
+  map<string, string> labels = 5;
+}
+
+// AgentUnregisterPayload is the payload for agent.unregister events.
+message AgentUnregisterPayload {
+  string agent_id = 1;
+  string reason = 2;
+}
+
+// AgentErrorPayload is the payload for agent.error events.
+message AgentErrorPayload {
+  string agent_id = 1;
+  string error_code = 2;
+  string message = 3;
+  string stack_trace = 4;
+  string workflow_id = 5;
+}

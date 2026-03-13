@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package agentosprotocol.v1;
+
+option go_package = "github.com/carlosmolina/agent-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+
+// AgentEvent is the universal message envelope for all inter-agent communication.
+// The runtime routes by envelope fields only — payload is opaque.
+message AgentEvent {
+  string id = 1;
+  string type = 2;
+  string source_node = 3;
+  string source_agent = 4;
+  string target_agent = 5;
+  string workflow_id = 6;
+  string correlation_id = 7;
+  int64 timestamp = 8;
+  map<string, string> metadata = 9;
+  bytes payload = 10;
+}
