@@ -47,7 +47,7 @@ func setupHandler(t *testing.T) *handlerEnv {
 		for _, s := range subs {
 			_ = s.Unsubscribe()
 		}
-		bus.Close()
+		_ = bus.Close()
 	})
 
 	// Give consumers time to initialize.

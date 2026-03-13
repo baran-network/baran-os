@@ -15,9 +15,9 @@ import (
 
 // Bus implements eventbus.EventBus using NATS JetStream.
 type Bus struct {
-	nc  *nats.Conn
-	js  jetstream.JetStream
-	mu  sync.Mutex
+	nc   *nats.Conn
+	js   jetstream.JetStream
+	mu   sync.Mutex
 	subs []eventbus.Subscription
 }
 

@@ -28,7 +28,7 @@ func TestFullAgentLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create bus: %v", err)
 	}
-	t.Cleanup(func() { bus.Close() })
+	t.Cleanup(func() { _ = bus.Close() })
 
 	reg, err := registry.NewKVRegistry(ctx, nc, 2, 4)
 	if err != nil {

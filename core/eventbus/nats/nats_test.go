@@ -19,7 +19,7 @@ func newTestBus(t *testing.T) *natseventbus.Bus {
 	if err != nil {
 		t.Fatalf("failed to create bus: %v", err)
 	}
-	t.Cleanup(func() { bus.Close() })
+	t.Cleanup(func() { _ = bus.Close() })
 	return bus
 }
 

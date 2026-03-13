@@ -49,13 +49,13 @@ func streamForEventType(eventType string) (string, error) {
 func ensureStreams(ctx context.Context, js jetstream.JetStream) error {
 	for _, cfg := range streamConfigs {
 		_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-			Name:              cfg.Name,
-			Subjects:          cfg.Subjects,
-			Retention:         jetstream.LimitsPolicy,
-			Storage:           jetstream.FileStorage,
-			Discard:           jetstream.DiscardOld,
-			MaxAge:            cfg.MaxAge,
-			Duplicates:        2 * time.Minute,
+			Name:       cfg.Name,
+			Subjects:   cfg.Subjects,
+			Retention:  jetstream.LimitsPolicy,
+			Storage:    jetstream.FileStorage,
+			Discard:    jetstream.DiscardOld,
+			MaxAge:     cfg.MaxAge,
+			Duplicates: 2 * time.Minute,
 		})
 		if err != nil {
 			return fmt.Errorf("create stream %s: %w", cfg.Name, err)

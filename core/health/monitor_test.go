@@ -42,7 +42,7 @@ func setup(t *testing.T, cfg health.Config) *testEnv {
 
 	t.Cleanup(func() {
 		mon.Stop()
-		bus.Close()
+		_ = bus.Close()
 	})
 
 	return &testEnv{bus: bus, registry: reg, monitor: mon}

@@ -67,13 +67,19 @@ func TestReRegisterResetsStatus(t *testing.T) {
 		NodeID:       "node-1",
 	}
 
-	rev, _ := reg.Register(ctx, agent)
+	rev, err := reg.Register(ctx, agent)
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
 
 	// Mark as UNHEALTHY.
-	rev, _ = reg.UpdateStatus(ctx, "agent-re", registry.StatusUnhealthy, rev)
+	_, err = reg.UpdateStatus(ctx, "agent-re", registry.StatusUnhealthy, rev)
+	if err != nil {
+		t.Fatalf("update status: %v", err)
+	}
 
 	// Re-register should reset to ACTIVE.
-	_, err := reg.Register(ctx, agent)
+	_, err = reg.Register(ctx, agent)
 	if err != nil {
 		t.Fatalf("re-register: %v", err)
 	}
@@ -114,10 +120,12 @@ func TestDeregister(t *testing.T) {
 	reg := newTestRegistry(t)
 	ctx := context.Background()
 
-	reg.Register(ctx, registry.AgentRegistration{
+	if _, err := reg.Register(ctx, registry.AgentRegistration{
 		AgentID: "agent-del", AgentType: "t", Version: "1",
 		Capabilities: []registry.Capability{{Name: "c", Version: "1"}},
-	})
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
 
 	if err := reg.Deregister(ctx, "agent-del"); err != nil {
 		t.Fatalf("deregister: %v", err)
@@ -144,10 +152,12 @@ func TestListAgents(t *testing.T) {
 
 	for i := range 3 {
 		id := "agent-list-" + string(rune('A'+i))
-		reg.Register(ctx, registry.AgentRegistration{
+		if _, err := reg.Register(ctx, registry.AgentRegistration{
 			AgentID: id, AgentType: "t", Version: "1",
 			Capabilities: []registry.Capability{{Name: "c", Version: "1"}},
-		})
+		}); err != nil {
+			t.Fatalf("register %s: %v", id, err)
+		}
 	}
 
 	agents, err := reg.List(ctx)
