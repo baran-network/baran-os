@@ -3,7 +3,7 @@ modules:
   - path: protocol/proto
 lint:
   use:
-    - DEFAULT
+    - STANDARD
 breaking:
   use:
     - FILE
