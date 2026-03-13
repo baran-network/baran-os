@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/carlosmolina/agent-os/protocol v0.0.0-00010101000000-000000000000
+	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats-server/v2 v2.12.5
 	github.com/nats-io/nats.go v1.49.0
 	google.golang.org/protobuf v1.36.11
