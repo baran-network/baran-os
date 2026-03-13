@@ -1,0 +1,54 @@
+# Claude Code
+CLAUDE.md
+.claude/
+
+# Spec-kit
+.specify/
+specs/
+
+# Go
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Protocol Buffers generated code
+protocol/gen/
+
+# Node / UI
+node_modules/
+.next/
+out/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# NATS
+nats-data/
