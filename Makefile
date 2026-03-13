@@ -19,8 +19,8 @@ lint:
 	cd core && golangci-lint run ./...
 
 fmt:
-	cd core && gofmt -l -w .
-	cd core && goimports -l -w .
+	cd core && go fmt ./...
+	cd protocol && go fmt ./...
 
 check: fmt lint test-race
 
