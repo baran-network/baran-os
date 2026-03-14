@@ -6,48 +6,38 @@ import (
 	"strings"
 	"time"
 
+	"github.com/carlosmolina/agent-os/core/router"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// streamConfig holds the configuration for a JetStream stream.
-type streamConfig struct {
-	Name     string
-	Subjects []string
-	MaxAge   time.Duration
-}
-
-// streamConfigs defines the system streams and their configurations.
-var streamConfigs = []streamConfig{
-	{
-		Name:     "AGENTS",
-		Subjects: []string{"agent.register", "agent.unregister", "agent.error"},
-		MaxAge:   24 * time.Hour,
-	},
-	{
-		Name:     "HEALTH",
-		Subjects: []string{"agent.health.ping", "agent.health.pong"},
-		MaxAge:   1 * time.Hour,
-	},
-}
+// registry is the shared StreamRegistry used for event type → stream resolution.
+var registry = router.DefaultStreamRegistry()
 
 // streamForEventType returns the stream name for a given event type.
+// It checks the static registry first, then handles dynamic workflow streams.
 func streamForEventType(eventType string) (string, error) {
-	// Check health subjects first (more specific prefix).
-	if strings.HasPrefix(eventType, "agent.health.") {
-		return "HEALTH", nil
+	name, ok := registry.StreamForEventType(eventType)
+	if ok {
+		return name, nil
 	}
-	// Check agent-level subjects.
-	for _, subj := range streamConfigs[0].Subjects {
-		if eventType == subj {
-			return "AGENTS", nil
+
+	// Handle dynamic workflow subjects: workflow.{workflow_id}.{event_type}
+	if len(eventType) > 9 && eventType[:9] == "workflow." {
+		// Extract workflow ID from "workflow.{id}.{rest}"
+		rest := eventType[9:]
+		dot := strings.Index(rest, ".")
+		if dot > 0 {
+			wfID := rest[:dot]
+			return fmt.Sprintf("WF-%s", wfID), nil
 		}
 	}
+
 	return "", fmt.Errorf("no stream mapped for event type %q", eventType)
 }
 
 // ensureStreams creates all system streams if they don't already exist.
 func ensureStreams(ctx context.Context, js jetstream.JetStream) error {
-	for _, cfg := range streamConfigs {
+	for _, cfg := range registry.Configs() {
 		_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 			Name:       cfg.Name,
 			Subjects:   cfg.Subjects,

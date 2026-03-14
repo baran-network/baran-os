@@ -25,6 +25,13 @@ type Subscription interface {
 	Unsubscribe() error
 }
 
+// StreamCreator is an optional interface for EventBus implementations that
+// support creating streams on-demand (e.g., per-workflow streams).
+type StreamCreator interface {
+	// EnsureStream creates a stream with the given name and subjects if it doesn't exist.
+	EnsureStream(ctx context.Context, name string, subjects []string) error
+}
+
 // EventBus is the transport abstraction for publishing and subscribing to events.
 // Implementations MUST NOT leak transport-specific types through this interface.
 type EventBus interface {

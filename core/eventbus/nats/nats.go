@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/carlosmolina/agent-os/core/eventbus"
 	"github.com/nats-io/nats.go"
@@ -58,13 +59,9 @@ func NewFromConn(ctx context.Context, nc *nats.Conn) (*Bus, error) {
 }
 
 // Publish serializes an Event to a protobuf AgentEvent and publishes it to the
-// correct JetStream stream. The event ID is set as Nats-Msg-Id for deduplication.
+// matching JetStream stream. The event ID is set as Nats-Msg-Id for deduplication.
+// JetStream routes the message to the correct stream based on subject matching.
 func (b *Bus) Publish(ctx context.Context, event *eventbus.Event) error {
-	stream, err := streamForEventType(event.Type)
-	if err != nil {
-		return err
-	}
-
 	pbEvent := &protocolv1.AgentEvent{
 		Id:            event.ID,
 		Type:          event.Type,
@@ -89,7 +86,7 @@ func (b *Bus) Publish(ctx context.Context, event *eventbus.Event) error {
 
 	_, err = b.js.PublishMsg(ctx, msg)
 	if err != nil {
-		return fmt.Errorf("publish to stream %s: %w", stream, err)
+		return fmt.Errorf("publish event %s: %w", event.Type, err)
 	}
 
 	return nil
@@ -175,6 +172,23 @@ func (b *Bus) Subscribe(ctx context.Context, eventType string, handler eventbus.
 	b.mu.Unlock()
 
 	return sub, nil
+}
+
+// EnsureStream creates a stream with the given name and subjects if it doesn't exist.
+func (b *Bus) EnsureStream(ctx context.Context, name string, subjects []string) error {
+	_, err := b.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:       name,
+		Subjects:   subjects,
+		Retention:  jetstream.LimitsPolicy,
+		Storage:    jetstream.FileStorage,
+		Discard:    jetstream.DiscardOld,
+		MaxAge:     24 * time.Hour,
+		Duplicates: 2 * time.Minute,
+	})
+	if err != nil {
+		return fmt.Errorf("ensure stream %s: %w", name, err)
+	}
+	return nil
 }
 
 // Close drains and closes the NATS connection.

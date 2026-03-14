@@ -6,6 +6,9 @@ CLAUDE.md
 .specify/
 specs/
 
+# Roadmap (personal reference, not for repo)
+original_roadmap.md
+
 # Go
 go.work
 go.work.sum
