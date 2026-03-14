@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package agentosprotocol.v1;
+
+option go_package = "github.com/carlosmolina/agent-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+
+import "agentosprotocol/v1/system.proto";
+
+// CapabilityAnnouncePayload is the payload for agent.capability.announce events.
+// An empty capabilities list signals that the agent no longer provides any capabilities.
+message CapabilityAnnouncePayload {
+  string agent_id = 1;
+  repeated Capability capabilities = 2;
+}
+
+// DiscoveryRequestPayload is the payload for agent.discovery.request events.
+message DiscoveryRequestPayload {
+  string capability_name = 1;
+  string version_constraint = 2;
+}
+
+// DiscoveryResponsePayload is the payload for agent.discovery.response events.
+message DiscoveryResponsePayload {
+  repeated AgentCapabilityMatch matches = 1;
+}
+
+// AgentCapabilityMatch represents an agent that matches a discovery query.
+message AgentCapabilityMatch {
+  string agent_id = 1;
+  string agent_type = 2;
+  repeated Capability capabilities = 3;
+}

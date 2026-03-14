@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/carlosmolina/agent-os/core/eventbus"
@@ -13,6 +14,10 @@ import (
 
 	protocolv1 "github.com/carlosmolina/agent-os/protocol/gen/go/agentosprotocol/v1"
 )
+
+// consumerSeq generates unique consumer name suffixes to allow multiple
+// subscribers to the same event type without sharing a single consumer.
+var consumerSeq atomic.Uint64
 
 // Bus implements eventbus.EventBus using NATS JetStream.
 type Bus struct {
@@ -110,8 +115,10 @@ func (b *Bus) Subscribe(ctx context.Context, eventType string, handler eventbus.
 		return nil, err
 	}
 
-	// Use the event type as the durable consumer name (dots replaced with dashes).
-	consumerName := sanitizeConsumerName(eventType)
+	// Each subscription gets a unique consumer so multiple subscribers to the
+	// same event type each receive every message (fan-out, not load-balanced).
+	seq := consumerSeq.Add(1)
+	consumerName := fmt.Sprintf("%s-%d", sanitizeConsumerName(eventType), seq)
 
 	filterSubject := eventType
 

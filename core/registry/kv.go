@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -203,4 +205,39 @@ func (r *KVRegistry) IncrementMissedHeartbeats(ctx context.Context, agentID stri
 		return 0, 0, fmt.Errorf("%w: %v", ErrCASConflict, err)
 	}
 	return reg.Status, rev, nil
+}
+
+func (r *KVRegistry) FindByCapability(ctx context.Context, capabilityName string, versionConstraint string) ([]AgentRegistration, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var matched []AgentRegistration
+	for _, agent := range all {
+		if agent.Status != StatusActive {
+			continue
+		}
+		for _, cap := range agent.Capabilities {
+			if cap.Name != capabilityName {
+				continue
+			}
+			if versionConstraint != "" {
+				// Semver prefix matching: constraint "1." matches version "1.0.0", "1.2.3", etc.
+				prefix := strings.TrimSuffix(versionConstraint, "x")
+				prefix = strings.TrimSuffix(prefix, "X")
+				if !strings.HasPrefix(cap.Version, prefix) {
+					continue
+				}
+			}
+			matched = append(matched, agent)
+			break
+		}
+	}
+
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].AgentID < matched[j].AgentID
+	})
+
+	return matched, nil
 }

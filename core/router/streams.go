@@ -38,6 +38,11 @@ func DefaultStreamRegistry() *StreamRegistry {
 			Subjects: []string{"agent.direct.>"},
 			MaxAge:   24 * time.Hour,
 		},
+		StreamConfig{
+			Name:     "DISCOVERY",
+			Subjects: []string{"agent.capability.announce", "agent.discovery.request", "agent.discovery.response"},
+			MaxAge:   24 * time.Hour,
+		},
 	)
 }
 

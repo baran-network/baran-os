@@ -124,6 +124,9 @@ func (r *DefaultRouter) routeCapability(ctx context.Context, event *eventbus.Eve
 
 	var matched []string
 	for _, agent := range agents {
+		if agent.Status != registry.StatusActive {
+			continue
+		}
 		for _, cap := range agent.Capabilities {
 			if cap.Name == capability {
 				matched = append(matched, agent.AgentID)

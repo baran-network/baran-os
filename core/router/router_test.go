@@ -526,6 +526,121 @@ func TestCapabilityRouting(t *testing.T) {
 	}
 }
 
+func TestCapabilityRouting_ActiveOnly(t *testing.T) {
+	r, reg, _ := setupRouter(t)
+	ctx := context.Background()
+
+	agentActive := "cap-active-" + uuid.Must(uuid.NewV7()).String()[:8]
+	agentUnhealthy := "cap-unhealthy-" + uuid.Must(uuid.NewV7()).String()[:8]
+
+	registerAgent(t, ctx, reg, agentActive, "detector", "evacuation-planning")
+	rev, _ := reg.Register(ctx, registry.AgentRegistration{
+		AgentID:      agentUnhealthy,
+		AgentType:    "detector",
+		Version:      "1.0.0",
+		Capabilities: []registry.Capability{{Name: "evacuation-planning", Version: "1.0.0"}},
+	})
+	// Mark agent as UNHEALTHY.
+	_, _ = reg.UpdateStatus(ctx, agentUnhealthy, registry.StatusUnhealthy, rev)
+
+	var receivedActive, receivedUnhealthy atomic.Int32
+
+	subActive, _ := r.SubscribeDirect(ctx, agentActive, func(_ context.Context, _ *eventbus.Event) error {
+		receivedActive.Add(1)
+		return nil
+	})
+	t.Cleanup(func() { _ = subActive.Unsubscribe() })
+
+	subUnhealthy, _ := r.SubscribeDirect(ctx, agentUnhealthy, func(_ context.Context, _ *eventbus.Event) error {
+		receivedUnhealthy.Add(1)
+		return nil
+	})
+	t.Cleanup(func() { _ = subUnhealthy.Unsubscribe() })
+
+	time.Sleep(200 * time.Millisecond)
+
+	err := r.Route(ctx, &eventbus.Event{
+		ID:          uuid.Must(uuid.NewV7()).String(),
+		Type:        "sensor.alert",
+		SourceAgent: "sensor-1",
+		Metadata:    map[string]string{"route.capability": "evacuation-planning"},
+		Timestamp:   time.Now().UnixNano(),
+	})
+	if err != nil {
+		t.Fatalf("route capability: %v", err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	if got := receivedActive.Load(); got != 1 {
+		t.Errorf("ACTIVE agent expected 1 event, got %d", got)
+	}
+	if got := receivedUnhealthy.Load(); got != 0 {
+		t.Errorf("UNHEALTHY agent expected 0 events, got %d", got)
+	}
+}
+
+func TestCapabilityRouting_AllDeadPublishesError(t *testing.T) {
+	r, reg, _ := setupRouter(t)
+	ctx := context.Background()
+
+	agentDead := "cap-dead-" + uuid.Must(uuid.NewV7()).String()[:8]
+	rev, _ := reg.Register(ctx, registry.AgentRegistration{
+		AgentID:      agentDead,
+		AgentType:    "test",
+		Version:      "1.0.0",
+		Capabilities: []registry.Capability{{Name: "dead-cap", Version: "1.0.0"}},
+	})
+	_, _ = reg.UpdateStatus(ctx, agentDead, registry.StatusUnhealthy, rev)
+
+	var mu sync.Mutex
+	var errorEvents []*protocolv1.AgentErrorPayload
+
+	sub, err := r.Subscribe(ctx, "agent.error", func(_ context.Context, evt *eventbus.Event) error {
+		var payload protocolv1.AgentErrorPayload
+		if err := proto.Unmarshal(evt.Payload, &payload); err != nil {
+			return nil
+		}
+		mu.Lock()
+		errorEvents = append(errorEvents, &payload)
+		mu.Unlock()
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	time.Sleep(200 * time.Millisecond)
+
+	err = r.Route(ctx, &eventbus.Event{
+		ID:          uuid.Must(uuid.NewV7()).String(),
+		Type:        "sensor.alert",
+		SourceAgent: "sensor-1",
+		Metadata:    map[string]string{"route.capability": "dead-cap"},
+		Timestamp:   time.Now().UnixNano(),
+	})
+	if err != nil {
+		t.Fatalf("route should not return error: %v", err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	found := false
+	for _, e := range errorEvents {
+		if e.ErrorCode == "ROUTER_NO_CAPABILITY_MATCH" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected ROUTER_NO_CAPABILITY_MATCH when all agents are non-ACTIVE")
+	}
+}
+
 func TestCapabilityRouting_NoMatch(t *testing.T) {
 	r, _, _ := setupRouter(t)
 	ctx := context.Background()

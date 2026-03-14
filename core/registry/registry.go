@@ -16,6 +16,12 @@ type AgentRegistry interface {
 	// List returns all currently registered agents.
 	List(ctx context.Context) ([]AgentRegistration, error)
 
+	// FindByCapability returns all ACTIVE agents that declare a capability
+	// matching the given name. If versionConstraint is non-empty, only agents
+	// whose capability version starts with the constraint prefix are returned.
+	// Results are sorted by AgentID for deterministic ordering.
+	FindByCapability(ctx context.Context, capabilityName string, versionConstraint string) ([]AgentRegistration, error)
+
 	// UpdateStatus updates an agent's lifecycle status with CAS.
 	UpdateStatus(ctx context.Context, agentID string, status AgentLifecycleStatus, revision uint64) (uint64, error)
 

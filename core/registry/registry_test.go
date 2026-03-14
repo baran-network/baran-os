@@ -200,6 +200,106 @@ func TestRecordHeartbeat(t *testing.T) {
 	_ = rev
 }
 
+func TestFindByCapabilityNameMatch(t *testing.T) {
+	reg := newTestRegistry(t)
+	ctx := context.Background()
+
+	// Register agents with different capabilities.
+	reg.Register(ctx, registry.AgentRegistration{
+		AgentID: "agent-A", AgentType: "t", Version: "1.0.0",
+		Capabilities: []registry.Capability{{Name: "risk-estimation", Version: "1.0.0"}},
+	})
+	reg.Register(ctx, registry.AgentRegistration{
+		AgentID: "agent-B", AgentType: "t", Version: "1.0.0",
+		Capabilities: []registry.Capability{{Name: "risk-estimation", Version: "1.2.0"}},
+	})
+	reg.Register(ctx, registry.AgentRegistration{
+		AgentID: "agent-C", AgentType: "t", Version: "1.0.0",
+		Capabilities: []registry.Capability{{Name: "evacuation", Version: "1.0.0"}},
+	})
+
+	matches, err := reg.FindByCapability(ctx, "risk-estimation", "")
+	if err != nil {
+		t.Fatalf("FindByCapability: %v", err)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("got %d matches, want 2", len(matches))
+	}
+	if matches[0].AgentID != "agent-A" || matches[1].AgentID != "agent-B" {
+		t.Errorf("got agents %v, want [agent-A, agent-B]", []string{matches[0].AgentID, matches[1].AgentID})
+	}
+}
+
+func TestFindByCapabilityVersionConstraint(t *testing.T) {
+	reg := newTestRegistry(t)
+	ctx := context.Background()
+
+	reg.Register(ctx, registry.AgentRegistration{
+		AgentID: "agent-v1", AgentType: "t", Version: "1.0.0",
+		Capabilities: []registry.Capability{{Name: "risk-estimation", Version: "1.0.0"}},
+	})
+	reg.Register(ctx, registry.AgentRegistration{
+		AgentID: "agent-v2", AgentType: "t", Version: "1.0.0",
+		Capabilities: []registry.Capability{{Name: "risk-estimation", Version: "2.0.0"}},
+	})
+
+	matches, err := reg.FindByCapability(ctx, "risk-estimation", "1.x")
+	if err != nil {
+		t.Fatalf("FindByCapability: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("got %d matches, want 1", len(matches))
+	}
+	if matches[0].AgentID != "agent-v1" {
+		t.Errorf("got agent %s, want agent-v1", matches[0].AgentID)
+	}
+}
+
+func TestFindByCapabilityActiveOnly(t *testing.T) {
+	reg := newTestRegistry(t)
+	ctx := context.Background()
+
+	rev, _ := reg.Register(ctx, registry.AgentRegistration{
+		AgentID: "agent-unhealthy", AgentType: "t", Version: "1.0.0",
+		Capabilities: []registry.Capability{{Name: "detect", Version: "1.0.0"}},
+	})
+	reg.UpdateStatus(ctx, "agent-unhealthy", registry.StatusUnhealthy, rev)
+
+	reg.Register(ctx, registry.AgentRegistration{
+		AgentID: "agent-active", AgentType: "t", Version: "1.0.0",
+		Capabilities: []registry.Capability{{Name: "detect", Version: "1.0.0"}},
+	})
+
+	matches, err := reg.FindByCapability(ctx, "detect", "")
+	if err != nil {
+		t.Fatalf("FindByCapability: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("got %d matches, want 1", len(matches))
+	}
+	if matches[0].AgentID != "agent-active" {
+		t.Errorf("got agent %s, want agent-active", matches[0].AgentID)
+	}
+}
+
+func TestFindByCapabilityEmptyResult(t *testing.T) {
+	reg := newTestRegistry(t)
+	ctx := context.Background()
+
+	reg.Register(ctx, registry.AgentRegistration{
+		AgentID: "agent-x", AgentType: "t", Version: "1.0.0",
+		Capabilities: []registry.Capability{{Name: "unrelated", Version: "1.0.0"}},
+	})
+
+	matches, err := reg.FindByCapability(ctx, "nonexistent", "")
+	if err != nil {
+		t.Fatalf("FindByCapability: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Errorf("got %d matches, want 0", len(matches))
+	}
+}
+
 func TestIncrementMissedHeartbeats(t *testing.T) {
 	reg := newTestRegistry(t)
 	ctx := context.Background()
