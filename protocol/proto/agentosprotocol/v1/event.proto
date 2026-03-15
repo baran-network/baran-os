@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package agentosprotocol.v1;
 
-option go_package = "github.com/ad-hok/agent-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+option go_package = "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
 
 // AgentEvent is the universal message envelope for all inter-agent communication.
 // The runtime routes by envelope fields only — payload is opaque.

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ad-hok/agent-os/core/eventbus"
-	"github.com/ad-hok/agent-os/core/workflow"
-	protocolv1 "github.com/ad-hok/agent-os/protocol/gen/go/agentosprotocol/v1"
+	"github.com/baran-network/baran-os/core/eventbus"
+	"github.com/baran-network/baran-os/core/workflow"
+	protocolv1 "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1"
 	"google.golang.org/protobuf/proto"
 )
 

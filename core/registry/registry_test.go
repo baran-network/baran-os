@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ad-hok/agent-os/core/registry"
-	"github.com/ad-hok/agent-os/core/testutil"
+	"github.com/baran-network/baran-os/core/registry"
+	"github.com/baran-network/baran-os/core/testutil"
 )
 
 func newTestRegistry(t *testing.T) *registry.KVRegistry {

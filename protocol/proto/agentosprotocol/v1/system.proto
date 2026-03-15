@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package agentosprotocol.v1;
 
-option go_package = "github.com/ad-hok/agent-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+option go_package = "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
 
 // Capability declares an ability of an agent.
 message Capability {

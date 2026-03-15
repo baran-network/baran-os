@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ad-hok/agent-os/core/testutil"
-	"github.com/ad-hok/agent-os/core/workflow"
+	"github.com/baran-network/baran-os/core/testutil"
+	"github.com/baran-network/baran-os/core/workflow"
 )
 
 func newTestStore(t *testing.T) workflow.WorkflowStateStore {

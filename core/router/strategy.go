@@ -1,6 +1,6 @@
 package router
 
-import "github.com/ad-hok/agent-os/core/eventbus"
+import "github.com/baran-network/baran-os/core/eventbus"
 
 // RoutingStrategy classifies how an event should be routed.
 type RoutingStrategy int

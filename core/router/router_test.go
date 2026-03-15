@@ -8,15 +8,15 @@ import (
 	"testing"
 	"time"
 
-	natseventbus "github.com/ad-hok/agent-os/core/eventbus/nats"
-	"github.com/ad-hok/agent-os/core/registry"
-	"github.com/ad-hok/agent-os/core/router"
-	"github.com/ad-hok/agent-os/core/testutil"
+	natseventbus "github.com/baran-network/baran-os/core/eventbus/nats"
+	"github.com/baran-network/baran-os/core/registry"
+	"github.com/baran-network/baran-os/core/router"
+	"github.com/baran-network/baran-os/core/testutil"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ad-hok/agent-os/core/eventbus"
-	protocolv1 "github.com/ad-hok/agent-os/protocol/gen/go/agentosprotocol/v1"
+	"github.com/baran-network/baran-os/core/eventbus"
+	protocolv1 "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1"
 )
 
 // setupRouter creates an embedded NATS server, EventBus, AgentRegistry, and DefaultRouter.

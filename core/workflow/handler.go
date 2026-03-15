@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ad-hok/agent-os/core/eventbus"
+	"github.com/baran-network/baran-os/core/eventbus"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
-	protocolv1 "github.com/ad-hok/agent-os/protocol/gen/go/agentosprotocol/v1"
+	protocolv1 "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1"
 )
 
 // handleWorkflowStart processes a workflow.start event.

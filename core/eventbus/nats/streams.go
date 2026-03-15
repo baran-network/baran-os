@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ad-hok/agent-os/core/router"
+	"github.com/baran-network/baran-os/core/router"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

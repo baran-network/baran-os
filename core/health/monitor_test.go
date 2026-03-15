@@ -6,15 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ad-hok/agent-os/core/eventbus"
-	natseventbus "github.com/ad-hok/agent-os/core/eventbus/nats"
-	"github.com/ad-hok/agent-os/core/health"
-	"github.com/ad-hok/agent-os/core/registry"
-	"github.com/ad-hok/agent-os/core/testutil"
+	"github.com/baran-network/baran-os/core/eventbus"
+	natseventbus "github.com/baran-network/baran-os/core/eventbus/nats"
+	"github.com/baran-network/baran-os/core/health"
+	"github.com/baran-network/baran-os/core/registry"
+	"github.com/baran-network/baran-os/core/testutil"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
-	protocolv1 "github.com/ad-hok/agent-os/protocol/gen/go/agentosprotocol/v1"
+	protocolv1 "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1"
 )
 
 type testEnv struct {

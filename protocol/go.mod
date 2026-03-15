@@ -1,4 +1,4 @@
-module github.com/ad-hok/agent-os/protocol
+module github.com/baran-network/baran-os/protocol
 
 go 1.26.1
 

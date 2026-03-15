@@ -3,7 +3,7 @@ package testutil_test
 import (
 	"testing"
 
-	"github.com/ad-hok/agent-os/core/testutil"
+	"github.com/baran-network/baran-os/core/testutil"
 )
 
 func TestStartNATS(t *testing.T) {
