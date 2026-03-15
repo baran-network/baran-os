@@ -57,3 +57,7 @@ Thumbs.db
 
 # NATS
 nats-data/
+baran-data/
+
+# Built binary
+baran

@@ -1,4 +1,4 @@
-.PHONY: proto test test-race dev lint fmt check clean
+.PHONY: proto test test-race dev lint fmt check clean build
 
 proto:
 	buf generate
@@ -11,8 +11,11 @@ test-race:
 	cd protocol && go test -race ./...
 	cd core && go test -race ./...
 
-dev:
-	nats-server --jetstream --store_dir ./nats-data
+build:
+	cd core && go build -ldflags "-X main.version=$$(git describe --tags --always 2>/dev/null || echo dev) -X main.commit=$$(git rev-parse --short HEAD)" -o ../baran ./cmd/baran
+
+dev: build
+	./baran
 
 lint:
 	buf lint
