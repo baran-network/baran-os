@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package wildfire.v1;
+
+option go_package = "github.com/baran-network/baran-os/examples/wildfire/proto/gen;wildfire";
+
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_LOW = 1;
+  SEVERITY_MEDIUM = 2;
+  SEVERITY_HIGH = 3;
+  SEVERITY_CRITICAL = 4;
+}
+
+enum ThreatLevel {
+  THREAT_LEVEL_UNSPECIFIED = 0;
+  THREAT_LEVEL_MINIMAL = 1;
+  THREAT_LEVEL_MODERATE = 2;
+  THREAT_LEVEL_SEVERE = 3;
+  THREAT_LEVEL_EXTREME = 4;
+}
+
+message WildfireIncident {
+  string incident_id = 1;
+  string location = 2;
+  double latitude = 3;
+  double longitude = 4;
+  Severity severity = 5;
+  double affected_area_hectares = 6;
+  double wind_speed_kmh = 7;
+  string wind_direction = 8;
+  int64 reported_at = 9;
+}
+
+message RiskAssessment {
+  double risk_score = 1;
+  double spread_rate_hectares_per_hour = 2;
+  ThreatLevel threat_level = 3;
+  repeated string affected_zones = 4;
+  double estimated_duration_hours = 5;
+}
+
+message ResourcePlan {
+  int32 assigned_fire_trucks = 1;
+  int32 assigned_crews = 2;
+  int32 assigned_aircraft = 3;
+  int32 assigned_ambulances = 4;
+  string staging_area = 5;
+  int32 estimated_response_time_minutes = 6;
+}
+
+message EvacuationPlan {
+  repeated EvacuationZone evacuation_zones = 1;
+  repeated string shelter_locations = 2;
+  int32 estimated_evacuees = 3;
+  double estimated_completion_hours = 4;
+}
+
+message EvacuationZone {
+  string zone_name = 1;
+  int32 priority = 2;
+  int32 population = 3;
+  string primary_route = 4;
+  string alternate_route = 5;
+}
