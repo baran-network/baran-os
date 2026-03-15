@@ -74,22 +74,26 @@ func (a *Agent) dispatchStep(ctx context.Context, event *eventbus.Event) error {
 
 	a.mu.RLock()
 	entry, ok := a.capabilities[capName]
-	a.mu.RUnlock()
-
-	if !ok {
-		a.logger.Warn("no handler for capability", "capability", capName, "event_id", event.ID)
-		// Do not publish result — engine will timeout per spec
+	if !ok || a.state >= AgentStateStopping {
+		a.mu.RUnlock()
+		if !ok {
+			a.logger.Warn("no handler for capability", "capability", capName, "event_id", event.ID)
+		}
 		return nil
 	}
+	// Add to in-flight count while holding RLock so Stop() cannot
+	// race: once state is Stopping no new Add(1) can happen.
+	a.inFlight.Add(1)
+	a.mu.RUnlock()
 
 	stepCtx := buildStepContext(payload)
-
-	// Run in a goroutine so the subscription is non-blocking.
-	a.inFlight.Add(1)
+	// Use busCtx (not the subscription ctx) so in-flight handlers can
+	// still publish results after subscriptions are cancelled during Stop.
+	publishCtx := a.busCtx
 	go func() {
 		defer a.inFlight.Done()
-		result, handlerErr := safeInvoke(entry.handler, ctx, stepCtx)
-		if err := a.publishStepResult(ctx, payload.WorkflowId, payload.StepIndex, result, handlerErr); err != nil {
+		result, handlerErr := safeInvoke(entry.handler, publishCtx, stepCtx)
+		if err := a.publishStepResult(publishCtx, payload.WorkflowId, payload.StepIndex, result, handlerErr); err != nil {
 			a.logger.Warn("failed to publish step result", "error", err)
 		}
 		a.cache.Add(event.ID)

@@ -68,6 +68,8 @@ type Agent struct {
 	ownsBus     bool
 	subs        []eventbus.Subscription
 	inFlight    sync.WaitGroup
+	busCtx      context.Context    // independent context for in-flight publish calls
+	busCancel   context.CancelFunc // cancelled after in-flight handlers drain
 	logger      *slog.Logger
 	cache       *idempotencyCache
 }
@@ -196,7 +198,11 @@ func (a *Agent) Start(ctx context.Context) error {
 		return fmt.Errorf("subscribe direct: %w", err)
 	}
 
+	busCtx, busCancel := context.WithCancel(context.Background())
+
 	a.mu.Lock()
+	a.busCtx = busCtx
+	a.busCancel = busCancel
 	a.state = AgentStateRunning
 	a.mu.Unlock()
 
@@ -242,6 +248,14 @@ func (a *Agent) Stop(ctx context.Context) error {
 
 	a.logger.Info("stopping agent")
 
+	// Cancel subscriptions first so NATS stops delivering new messages.
+	// Combined with the state check in dispatchStep (which guards
+	// inFlight.Add under RLock), this guarantees no new Add(1) calls
+	// can race with Wait() below.
+	for _, sub := range subs {
+		_ = sub.Unsubscribe()
+	}
+
 	// Wait for in-flight step handlers up to ShutdownTimeout.
 	done := make(chan struct{})
 	go func() {
@@ -255,15 +269,15 @@ func (a *Agent) Stop(ctx context.Context) error {
 		a.logger.Warn("shutdown timeout reached, forcing stop")
 	}
 
+	// In-flight handlers have drained (or timed out); cancel busCtx.
+	if a.busCancel != nil {
+		a.busCancel()
+	}
+
 	// Unregister from the runtime.
 	if bus != nil {
 		if err := a.unregister(ctx); err != nil {
 			a.logger.Warn("unregister failed", "error", err)
-		}
-
-		// Cancel all subscriptions.
-		for _, sub := range subs {
-			_ = sub.Unsubscribe()
 		}
 
 		if a.ownsBus {
