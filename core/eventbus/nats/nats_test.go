@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/carlosmolina/agent-os/core/eventbus"
-	natseventbus "github.com/carlosmolina/agent-os/core/eventbus/nats"
-	"github.com/carlosmolina/agent-os/core/testutil"
+	"github.com/ad-hok/agent-os/core/eventbus"
+	natseventbus "github.com/ad-hok/agent-os/core/eventbus/nats"
+	"github.com/ad-hok/agent-os/core/testutil"
 )
 
 func newTestBus(t *testing.T) *natseventbus.Bus {

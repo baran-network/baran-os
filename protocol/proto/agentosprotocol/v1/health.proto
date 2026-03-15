@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package agentosprotocol.v1;
 
-option go_package = "github.com/carlosmolina/agent-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+option go_package = "github.com/ad-hok/agent-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
 
 // AgentStatus is the self-reported health status of an agent.
 enum AgentStatus {

@@ -1,4 +1,4 @@
-module github.com/carlosmolina/agent-os/protocol
+module github.com/ad-hok/agent-os/protocol
 
 go 1.26.1
 

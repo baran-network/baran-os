@@ -7,12 +7,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/carlosmolina/agent-os/core/eventbus"
+	"github.com/ad-hok/agent-os/core/eventbus"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"google.golang.org/protobuf/proto"
 
-	protocolv1 "github.com/carlosmolina/agent-os/protocol/gen/go/agentosprotocol/v1"
+	protocolv1 "github.com/ad-hok/agent-os/protocol/gen/go/agentosprotocol/v1"
 )
 
 // consumerSeq generates unique consumer name suffixes to allow multiple

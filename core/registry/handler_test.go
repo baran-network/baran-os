@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/carlosmolina/agent-os/core/eventbus"
-	natseventbus "github.com/carlosmolina/agent-os/core/eventbus/nats"
-	"github.com/carlosmolina/agent-os/core/registry"
-	"github.com/carlosmolina/agent-os/core/testutil"
+	"github.com/ad-hok/agent-os/core/eventbus"
+	natseventbus "github.com/ad-hok/agent-os/core/eventbus/nats"
+	"github.com/ad-hok/agent-os/core/registry"
+	"github.com/ad-hok/agent-os/core/testutil"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
-	protocolv1 "github.com/carlosmolina/agent-os/protocol/gen/go/agentosprotocol/v1"
+	protocolv1 "github.com/ad-hok/agent-os/protocol/gen/go/agentosprotocol/v1"
 )
 
 type handlerEnv struct {

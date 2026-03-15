@@ -1,6 +1,9 @@
 package router
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // StreamConfig holds the configuration for a JetStream stream.
 type StreamConfig struct {
@@ -24,9 +27,18 @@ func NewStreamRegistry(configs ...StreamConfig) *StreamRegistry {
 func DefaultStreamRegistry() *StreamRegistry {
 	return NewStreamRegistry(
 		StreamConfig{
-			Name:     "AGENTS",
-			Subjects: []string{"agent.register", "agent.unregister", "agent.error"},
-			MaxAge:   24 * time.Hour,
+			Name: "AGENTS",
+			Subjects: []string{
+				"agent.register",
+				"agent.unregister",
+				"agent.error",
+				// Workflow start is broadcast (no workflow_id yet — engine generates it).
+				"workflow.start",
+				// Workflow state queries are global (not per-workflow).
+				"workflow.state.request",
+				"workflow.state.response",
+			},
+			MaxAge: 24 * time.Hour,
 		},
 		StreamConfig{
 			Name:     "HEALTH",
@@ -47,7 +59,7 @@ func DefaultStreamRegistry() *StreamRegistry {
 }
 
 // StreamForEventType returns the stream name for a given event type by matching
-// against configured subjects. Supports exact match and wildcard ">" suffixes.
+// against configured subjects. Supports exact match, ">" suffix, and "*" token wildcards.
 func (r *StreamRegistry) StreamForEventType(eventType string) (string, bool) {
 	for _, cfg := range r.streams {
 		for _, subj := range cfg.Subjects {
@@ -65,7 +77,7 @@ func (r *StreamRegistry) Configs() []StreamConfig {
 }
 
 // matchSubject checks if an event type matches a NATS subject pattern.
-// Supports exact match and ">" wildcard (matches any suffix at that token level).
+// Supports exact match, ">" wildcard (any suffix), and "*" wildcard (one token).
 func matchSubject(pattern, eventType string) bool {
 	if pattern == eventType {
 		return true
@@ -77,5 +89,19 @@ func matchSubject(pattern, eventType string) bool {
 			return true
 		}
 	}
-	return false
+	// Handle "*" wildcard: each "*" matches exactly one dot-delimited token.
+	return matchTokens(strings.Split(pattern, "."), strings.Split(eventType, "."))
+}
+
+// matchTokens returns true if all tokens match, treating "*" as a single-token wildcard.
+func matchTokens(pattern, subject []string) bool {
+	if len(pattern) != len(subject) {
+		return false
+	}
+	for i, p := range pattern {
+		if p != "*" && p != subject[i] {
+			return false
+		}
+	}
+	return true
 }

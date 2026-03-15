@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package agentosprotocol.v1;
+
+option go_package = "github.com/ad-hok/agent-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+
+// --- Enumerations ---
+
+enum WorkflowStatus {
+  WORKFLOW_STATUS_UNSPECIFIED = 0;
+  WORKFLOW_STATUS_CREATED     = 1;
+  WORKFLOW_STATUS_RUNNING     = 2;
+  WORKFLOW_STATUS_COMPLETED   = 3;
+  WORKFLOW_STATUS_FAILED      = 4;
+  // WORKFLOW_STATUS_WAITING_HUMAN = 5; // Reserved for Phase 4
+}
+
+enum StepStatus {
+  STEP_STATUS_UNSPECIFIED = 0;
+  STEP_STATUS_SUCCESS     = 1;
+  STEP_STATUS_FAILURE     = 2;
+}
+
+// --- Supporting Messages ---
+
+message StepDefinition {
+  string name            = 1; // Human-readable step name
+  string capability      = 2; // Required agent capability
+  uint32 timeout_seconds = 3; // Max wait time (0 = default 30s)
+  bytes  input           = 4; // Optional initial input (domain-typed)
+}
+
+message WorkflowDefinition {
+  string               name      = 1; // Human-readable workflow name
+  repeated StepDefinition steps  = 2; // Ordered steps (min 1, max 100)
+  string               initiator = 3; // Agent ID or "runtime"
+}
+
+message StepResult {
+  uint32        step_index    = 1; // Which step (0-based)
+  string        agent_id      = 2; // Agent that executed
+  StepStatus    status        = 3; // SUCCESS or FAILURE
+  bytes         result        = 4; // Opaque result payload (domain-typed)
+  WorkflowError error         = 5; // Error details (if FAILURE)
+  int64         completed_at  = 6; // Unix nanos
+}
+
+message WorkflowError {
+  string code        = 1; // STEP_TIMEOUT, AGENT_UNAVAILABLE, STEP_FAILED, INVALID_DEFINITION
+  string message     = 2; // Human-readable description
+  uint32 step_index  = 3; // Which step failed
+  string agent_id    = 4; // Agent involved (if applicable)
+}
+
+// --- Event Payloads ---
+
+// workflow.start — Initiator → Engine
+message WorkflowStartPayload {
+  WorkflowDefinition definition = 1;
+}
+
+// workflow.step — Engine → Agent
+message WorkflowStepPayload {
+  uint32                step_index        = 1; // Current step index (0-based)
+  StepDefinition        step              = 2; // Step definition
+  string                workflow_id       = 3; // Workflow this step belongs to
+  repeated StepResult   previous_results  = 4; // Accumulated results from prior steps
+  bytes                 input             = 5; // Step input (from definition or previous result)
+}
+
+// workflow.step.result — Agent → Engine
+message WorkflowStepResultPayload {
+  uint32        step_index  = 1; // Which step this result is for
+  StepStatus    status      = 2; // SUCCESS or FAILURE
+  bytes         result      = 3; // Opaque result payload (domain-typed)
+  WorkflowError error       = 4; // Error details (if FAILURE)
+}
+
+// workflow.complete — Engine → Observers
+message WorkflowCompletePayload {
+  string              workflow_id  = 1;
+  repeated StepResult results      = 2; // All step results
+  int64               started_at   = 3; // Unix nanos
+  int64               completed_at = 4; // Unix nanos
+}
+
+// workflow.failed — Engine → Observers
+message WorkflowFailedPayload {
+  string        workflow_id = 1;
+  WorkflowError error       = 2; // Why it failed
+  uint32        failed_step = 3; // Which step failed
+  int64         started_at  = 4; // Unix nanos
+  int64         failed_at   = 5; // Unix nanos
+}
+
+// workflow.state.request — Any → Engine
+message WorkflowStateRequestPayload {
+  string workflow_id = 1;
+}
+
+// workflow.state.response — Engine → Requester
+message WorkflowStateResponsePayload {
+  string                workflow_id    = 1;
+  WorkflowStatus        status         = 2;
+  WorkflowDefinition    definition     = 3;
+  uint32                current_step   = 4;
+  repeated StepResult   step_results   = 5;
+  string                assigned_agent = 6; // Agent for current step
+  WorkflowError         error          = 7; // If FAILED
+  int64                 created_at     = 8;
+  int64                 updated_at     = 9;
+}
