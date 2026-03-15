@@ -100,10 +100,13 @@ func (r *Runtime) NodeID() string { return r.nodeID }
 
 // NATSURL returns the client connection URL of the embedded NATS server.
 func (r *Runtime) NATSURL() string {
-	if r.natsServer == nil {
+	r.mu.RLock()
+	s := r.natsServer
+	r.mu.RUnlock()
+	if s == nil {
 		return ""
 	}
-	return r.natsServer.ClientURL()
+	return s.ClientURL()
 }
 
 func (r *Runtime) startHealthHTTP() {
@@ -120,7 +123,9 @@ func (r *Runtime) startHealthHTTP() {
 		r.logger.With("component", "http").Error("failed to listen", "error", err)
 		return
 	}
+	r.mu.Lock()
 	r.healthAddr = ln.Addr().String()
+	r.mu.Unlock()
 	r.logger.With("component", "http").Info("health endpoint started", "addr", r.healthAddr)
 
 	go func() {
@@ -131,7 +136,12 @@ func (r *Runtime) startHealthHTTP() {
 }
 
 // HealthAddr returns the address the health HTTP server is listening on.
-func (r *Runtime) HealthAddr() string { return r.healthAddr }
+func (r *Runtime) HealthAddr() string {
+	r.mu.RLock()
+	addr := r.healthAddr
+	r.mu.RUnlock()
+	return addr
+}
 
 func (r *Runtime) startNATS(ctx context.Context) error {
 	log := r.logger.With("component", "nats")
@@ -157,16 +167,19 @@ func (r *Runtime) startNATS(ctx context.Context) error {
 		s.Shutdown()
 		return fmt.Errorf("server not ready within 5s")
 	}
-	r.natsServer = s
-	r.setSubsystemStatus("nats", "up")
-	log.Info("subsystem started", "port", opts.Port)
-
 	nc, err := nats.Connect(s.ClientURL())
 	if err != nil {
 		s.Shutdown()
 		return fmt.Errorf("connect client: %w", err)
 	}
+
+	r.mu.Lock()
+	r.natsServer = s
 	r.natsConn = nc
+	r.mu.Unlock()
+
+	r.setSubsystemStatus("nats", "up")
+	log.Info("subsystem started", "port", opts.Port)
 
 	return nil
 }
