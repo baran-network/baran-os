@@ -4,9 +4,11 @@
 
 Named after [Paul Baran](https://en.wikipedia.org/wiki/Paul_Baran), pioneer of distributed networks, Baran OS is an event-driven runtime where autonomous agents — AI-powered or not — discover each other, collaborate through typed events, and execute multi-step workflows without ever communicating directly.
 
+[![Version](https://img.shields.io/badge/version-v0.1.0-blue)](CHANGELOG.md)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![NATS](https://img.shields.io/badge/NATS-JetStream-27AAE1?logo=nats.io&logoColor=white)](https://nats.io)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-baran--network.github.io-purple)](https://baran-network.github.io/baran-os/)
 
 ## Why Baran
 
@@ -174,7 +176,8 @@ baran-os/
 
 ## Status
 
-Baran OS is in active development. The core runtime is functional and tested.
+Baran OS **v0.1.0** is the first public release. The core runtime is functional and tested.
+See the full [changelog](CHANGELOG.md) and the [documentation site](https://baran-network.github.io/baran-os/).
 
 **What works today:**
 - Agent lifecycle (registration, health monitoring, unregistration)
@@ -184,13 +187,13 @@ Baran OS is in active development. The core runtime is functional and tested.
 - Single-binary runtime with embedded NATS
 - Go SDK for building agents
 - End-to-end wildfire example
+- Documentation site with quickstart, SDK reference, and event catalog
 
 **What's coming:**
 - Human-in-the-loop decisions (approval workflows, conflict resolution)
 - Multi-node federation (cross-node event relay, distributed capability sharing)
 - Event replay and simulation
 - Python and TypeScript SDKs
-- Documentation site
 
 ## Development
 
