@@ -1,0 +1,11 @@
+- [Home](/)
+- [Architecture](architecture.md)
+- [Getting Started](getting-started.md)
+- [Building Agents](building-agents.md)
+- [Event Catalog](event-catalog.md)
+- [Project Structure](project-structure.md)
+
+---
+
+- [Landing Page](../)
+- [GitHub](https://github.com/baran-network/baran-os)

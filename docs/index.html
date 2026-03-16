@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Baran OS — Distributed Runtime for Autonomous Agent Coordination</title>
+  <meta name="description" content="An event-driven runtime where autonomous agents discover each other, collaborate through typed events, and execute multi-step workflows.">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            baran: { 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-white antialiased">
+
+  <!-- Hero -->
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950"></div>
+    <div class="relative max-w-7xl mx-auto px-6 py-24 md:py-36 text-center">
+      <h1 class="text-5xl md:text-7xl font-bold tracking-tight mb-6">
+        Baran <span class="text-indigo-400">OS</span>
+      </h1>
+      <p class="text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto mb-4">
+        A coordination runtime for networks of autonomous agents — AI, sensors, humans, or anything that can emit and receive events.
+      </p>
+      <p class="text-sm md:text-base text-slate-500 italic max-w-2xl mx-auto mb-10">
+        "Baran designed networks where no single node is indispensable. This runtime inherits that principle."
+      </p>
+      <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <a href="./guide/#/getting-started" class="inline-block bg-indigo-500 hover:bg-indigo-600 text-white font-semibold px-8 py-3 rounded-lg transition-colors">
+          Get Started
+        </a>
+        <a href="https://github.com/baran-network/baran-os" class="inline-block border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white font-semibold px-8 py-3 rounded-lg transition-colors">
+          GitHub
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Why Baran -->
+  <section id="why-baran" class="bg-slate-900">
+    <div class="max-w-7xl mx-auto px-6 py-20 md:py-28">
+      <h2 class="text-3xl md:text-4xl font-bold text-center mb-16">Why Baran</h2>
+      <div class="grid md:grid-cols-3 gap-10">
+
+        <div>
+          <h3 class="text-xl font-semibold text-indigo-400 mb-3">The Name</h3>
+          <p class="text-slate-400 leading-relaxed">
+            <a href="https://en.wikipedia.org/wiki/Paul_Baran" class="text-indigo-400 hover:underline">Paul Baran</a> invented the concept of distributed, survivable networks — networks where no single point of failure can bring down the whole.
+            Baran OS inherits that principle: agents connect, disconnect, and fail independently. The network adapts.
+          </p>
+        </div>
+
+        <div>
+          <h3 class="text-xl font-semibold text-indigo-400 mb-3">The Problem</h3>
+          <p class="text-slate-400 leading-relaxed">
+            Coordinating multiple autonomous agents — AI, sensors, humans, rule engines — is hard.
+            Developers build coordination from scratch for every project, or use frameworks designed to orchestrate LLM chains within a single process. Neither scales to heterogeneous, independent agents across networks.
+          </p>
+        </div>
+
+        <div>
+          <h3 class="text-xl font-semibold text-indigo-400 mb-3">The Difference</h3>
+          <p class="text-slate-400 leading-relaxed">
+            Tools like LangGraph and CrewAI orchestrate LLM workflows in-process. Baran OS is <strong class="text-slate-200">infrastructure</strong> for coordinating independent agents across networks.
+            Those tools can run <em>inside</em> Baran agents. Baran is the coordination layer underneath — complementary, not competing.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Vision -->
+  <section id="vision" class="bg-slate-950">
+    <div class="max-w-7xl mx-auto px-6 py-20 md:py-28">
+      <h2 class="text-3xl md:text-4xl font-bold text-center mb-6">Vision</h2>
+      <p class="text-slate-400 text-center max-w-3xl mx-auto mb-14">
+        We're building toward a future where networks of agents — AI, sensors, humans, legacy systems — self-discover, self-organize, and coordinate autonomously.
+      </p>
+      <div class="grid md:grid-cols-2 gap-8">
+
+        <div class="border border-slate-800 rounded-xl p-6">
+          <h3 class="text-lg font-semibold text-white mb-2">Self-Discovering Networks</h3>
+          <p class="text-slate-400">Agents announce their capabilities and discover each other dynamically. No manual wiring, no static configuration. New agents join the network and become available immediately.</p>
+        </div>
+
+        <div class="border border-slate-800 rounded-xl p-6">
+          <h3 class="text-lg font-semibold text-white mb-2">Humans as Validators</h3>
+          <p class="text-slate-400">Humans participate as decision-makers when needed — approving plans, resolving conflicts, validating outputs — not as operators manually connecting systems together.</p>
+        </div>
+
+        <div class="border border-slate-800 rounded-xl p-6">
+          <h3 class="text-lg font-semibold text-white mb-2">Decentralization First</h3>
+          <p class="text-slate-400">Auto-discovery and self-management are first-class capabilities, not afterthoughts. Each node operates autonomously and can function independently when disconnected.</p>
+        </div>
+
+        <div class="border border-slate-800 rounded-xl p-6">
+          <h3 class="text-lg font-semibold text-white mb-2">Federation</h3>
+          <p class="text-slate-400">Independent networks collaborate across organizational and geographic boundaries. A community node handles local events; when capacity is exceeded, it relays to regional or national networks.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Use Cases -->
+  <section id="use-cases" class="bg-slate-900">
+    <div class="max-w-7xl mx-auto px-6 py-20 md:py-28">
+      <h2 class="text-3xl md:text-4xl font-bold text-center mb-14">Use Cases</h2>
+      <div class="grid md:grid-cols-2 gap-8">
+
+        <div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
+          <h3 class="text-lg font-semibold text-white mb-2">Emergency Management</h3>
+          <p class="text-slate-400">A sensor detects a wildfire, an AI agent estimates risk, a rule-based agent allocates resources, a human approves the evacuation plan. Each agent contributes its specialty. With federation, community and provincial networks coordinate hierarchically.</p>
+        </div>
+
+        <div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
+          <h3 class="text-lg font-semibold text-white mb-2">Autonomous Coding</h3>
+          <p class="text-slate-400">A planner breaks down the task, a coder writes the implementation, a reviewer checks for issues, a tester validates the result. Each agent can use a different LLM or strategy, coordinated as workflow steps with result chaining.</p>
+        </div>
+
+        <div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
+          <h3 class="text-lg font-semibold text-white mb-2">Agent Swarms</h3>
+          <p class="text-slate-400">Dozens of agents with different capabilities register dynamically, discover each other through the capability registry, and self-organize into workflows. Broadcast routing and capability-based discovery provide the infrastructure swarms need.</p>
+        </div>
+
+        <div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
+          <h3 class="text-lg font-semibold text-white mb-2">AI Meets Traditional Systems</h3>
+          <p class="text-slate-400">Mix LLM-based agents with rule engines, sensor feeds, legacy services, and human decision points — all speaking the same event protocol. An IoT sensor triggers a workflow, an AI analyzes data, a heuristic applies business rules, a human makes the final call.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture -->
+  <section id="architecture" class="bg-slate-950">
+    <div class="max-w-7xl mx-auto px-6 py-20 md:py-28">
+      <h2 class="text-3xl md:text-4xl font-bold text-center mb-6">Architecture</h2>
+      <p class="text-slate-400 text-center max-w-3xl mx-auto mb-14">
+        Agents connect to the runtime, register their capabilities, and receive workflow steps matched to those capabilities. The runtime handles routing, sequencing, state, health monitoring, and failure detection.
+      </p>
+      <div class="max-w-3xl mx-auto">
+        <img src="./architecture.svg" alt="Baran OS Architecture — Runtime with Router, Workflow Engine, and Capability Discovery connected through Event Bus (NATS JetStream) to external agents" class="w-full rounded-xl">
+      </div>
+    </div>
+  </section>
+
+  <!-- Principles -->
+  <section id="principles" class="bg-slate-900">
+    <div class="max-w-7xl mx-auto px-6 py-20 md:py-28">
+      <h2 class="text-3xl md:text-4xl font-bold text-center mb-14">Core Principles</h2>
+      <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+
+        <div class="flex gap-4">
+          <div class="flex-shrink-0 w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center text-indigo-400 font-bold">1</div>
+          <div>
+            <h3 class="font-semibold text-white mb-1">Agents Are External Processes</h3>
+            <p class="text-slate-400 text-sm">Bring your own language, framework, and logic. Baran only coordinates.</p>
+          </div>
+        </div>
+
+        <div class="flex gap-4">
+          <div class="flex-shrink-0 w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center text-indigo-400 font-bold">2</div>
+          <div>
+            <h3 class="font-semibold text-white mb-1">Event Bus Communication</h3>
+            <p class="text-slate-400 text-sm">All communication flows through the event bus. No direct agent-to-agent calls. Observable, auditable, resilient.</p>
+          </div>
+        </div>
+
+        <div class="flex gap-4">
+          <div class="flex-shrink-0 w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center text-indigo-400 font-bold">3</div>
+          <div>
+            <h3 class="font-semibold text-white mb-1">Immutable Events, Stateless Agents</h3>
+            <p class="text-slate-400 text-sm">The runtime owns all state. Agents are disposable and horizontally scalable.</p>
+          </div>
+        </div>
+
+        <div class="flex gap-4">
+          <div class="flex-shrink-0 w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center text-indigo-400 font-bold">4</div>
+          <div>
+            <h3 class="font-semibold text-white mb-1">Typed Protocol</h3>
+            <p class="text-slate-400 text-sm">Protobuf-defined events with strict payload typing. No stringly-typed chaos.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer / CTA -->
+  <footer class="bg-slate-950 border-t border-slate-800">
+    <div class="max-w-7xl mx-auto px-6 py-16 text-center">
+      <h2 class="text-2xl md:text-3xl font-bold mb-4">Ready to coordinate?</h2>
+      <p class="text-slate-400 mb-8 max-w-xl mx-auto">
+        Get started with Baran OS in minutes. Install the runtime, run the wildfire example, and build your first agent.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+        <a href="./guide/#/getting-started" class="inline-block bg-indigo-500 hover:bg-indigo-600 text-white font-semibold px-8 py-3 rounded-lg transition-colors">
+          Get Started
+        </a>
+        <a href="./guide/" class="inline-block border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white font-semibold px-8 py-3 rounded-lg transition-colors">
+          Documentation
+        </a>
+      </div>
+      <div class="flex flex-wrap justify-center gap-6 text-sm text-slate-500">
+        <a href="./guide/" class="hover:text-slate-300 transition-colors">Documentation</a>
+        <a href="https://github.com/baran-network/baran-os" class="hover:text-slate-300 transition-colors">GitHub</a>
+        <span>MIT License</span>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
