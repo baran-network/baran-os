@@ -18,11 +18,16 @@ import (
 
 func main() {
 	natsURL := flag.String("nats-url", "nats://localhost:4222", "NATS server URL")
+	withApproval := flag.Bool("with-approval", false, "Add a human approval step before evacuation")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	timeout := 60 * time.Second
+	if *withApproval {
+		timeout = 10 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	bus, err := natseventbus.New(ctx, *natsURL)
@@ -51,15 +56,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Define the three-step workflow.
+	// Define workflow steps.
+	steps := []*protocolv1.StepDefinition{
+		{Name: "risk-estimation", Capability: "risk-estimation", TimeoutSeconds: 60, Input: incidentData},
+		{Name: "resource-allocation", Capability: "resource-allocation", TimeoutSeconds: 60, Input: incidentData},
+	}
+	if *withApproval {
+		steps = append(steps, &protocolv1.StepDefinition{
+			Name:          "approve-evacuation",
+			HumanApproval: true,
+			Prompt:        "Approve evacuation of Zone A affecting 5,000 residents?",
+			ResourceIds:   []string{"zone-a"},
+		})
+		fmt.Println("Human approval step enabled — open http://localhost:8080/ui/ to approve")
+	}
+	steps = append(steps, &protocolv1.StepDefinition{
+		Name: "evacuation-planning", Capability: "evacuation-planning", TimeoutSeconds: 60, Input: incidentData,
+	})
+
 	definition := &protocolv1.WorkflowDefinition{
 		Name:      "wildfire-emergency-response",
 		Initiator: "trigger",
-		Steps: []*protocolv1.StepDefinition{
-			{Name: "risk-estimation", Capability: "risk-estimation", TimeoutSeconds: 60, Input: incidentData},
-			{Name: "resource-allocation", Capability: "resource-allocation", TimeoutSeconds: 60, Input: incidentData},
-			{Name: "evacuation-planning", Capability: "evacuation-planning", TimeoutSeconds: 60, Input: incidentData},
-		},
+		Steps:     steps,
 	}
 
 	startPayload := &protocolv1.WorkflowStartPayload{Definition: definition}

@@ -45,6 +45,7 @@ type Runtime struct {
 
 	subscriptions   []eventbus.Subscription
 	httpServer      *http.Server
+	httpMux         *http.ServeMux
 	healthAddr      string
 	startedAt       time.Time
 	subsystemStatus map[string]string
@@ -112,6 +113,9 @@ func (r *Runtime) NATSURL() string {
 func (r *Runtime) startHealthHTTP() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", r.healthHandler)
+
+	// Decision API routes will be registered after the coordinator is ready.
+	r.httpMux = mux
 
 	r.httpServer = &http.Server{
 		Addr:    fmt.Sprintf(":%d", r.config.HealthPort),
@@ -245,6 +249,23 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	r.subscriptions = append(r.subscriptions, wfSubs...)
 	r.setSubsystemStatus("workflow_engine", "up")
 	log.Info("subsystem started", "component", "workflow")
+
+	// Register decision API + UI routes now that the coordinator is available.
+	uiHandler := NewUIHandler(engine.Coordinator(), bus, r.nodeID, r.logger)
+	uiHandler.RegisterRoutes(r.httpMux)
+
+	// Subscribe to events for SSE broadcasting.
+	sseSubs, err := uiHandler.SubscribeEvents(ctx)
+	if err != nil {
+		r.shutdown(ctx)
+		return fmt.Errorf("ui handler events: %w", err)
+	}
+	r.subscriptions = append(r.subscriptions, sseSubs...)
+
+	// Recover pending human decisions from any previous runtime instance.
+	if err := engine.Coordinator().RecoverPending(ctx, store.ListAll); err != nil {
+		log.Warn("failed to recover pending decisions", "error", err)
+	}
 
 	// Health Monitor
 	healthCfg := health.Config{

@@ -12,7 +12,7 @@ enum WorkflowStatus {
   WORKFLOW_STATUS_RUNNING     = 2;
   WORKFLOW_STATUS_COMPLETED   = 3;
   WORKFLOW_STATUS_FAILED      = 4;
-  // WORKFLOW_STATUS_WAITING_HUMAN = 5; // Reserved for Phase 4
+  WORKFLOW_STATUS_WAITING_HUMAN = 5;
 }
 
 enum StepStatus {
@@ -28,6 +28,9 @@ message StepDefinition {
   string capability      = 2; // Required agent capability
   uint32 timeout_seconds = 3; // Max wait time (0 = default 30s)
   bytes  input           = 4; // Optional initial input (domain-typed)
+  bool   human_approval  = 5; // If true, step requires human decision
+  string prompt          = 6; // Human-readable decision question
+  repeated string resource_ids = 7; // Resource IDs for conflict detection
 }
 
 message WorkflowDefinition {

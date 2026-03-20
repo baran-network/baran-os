@@ -60,5 +60,6 @@ Thumbs.db
 nats-data/
 baran-data/
 
-# Built binary
+# Built binaries
 baran
+trigger

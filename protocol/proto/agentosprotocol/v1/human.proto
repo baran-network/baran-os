@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package agentosprotocol.v1;
+
+option go_package = "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+
+import "agentosprotocol/v1/workflow.proto";
+
+// DecisionAction represents the possible actions an operator can take.
+enum DecisionAction {
+  DECISION_ACTION_UNSPECIFIED = 0;
+  DECISION_ACTION_APPROVE     = 1;
+  DECISION_ACTION_REJECT      = 2;
+}
+
+// HumanDecisionRequestPayload is the payload for "human.decision.request" events.
+// Published when a workflow step requires human approval.
+message HumanDecisionRequestPayload {
+  string                decision_id      = 1;
+  string                workflow_id      = 2;
+  uint32                step_index       = 3;
+  string                step_name        = 4;
+  string                prompt           = 5;
+  bytes                 input            = 6;
+  repeated StepResult   previous_results = 7;
+  repeated string       resource_ids     = 8;
+  repeated string       conflict_ids     = 9;
+}
+
+// HumanDecisionResponsePayload is the payload for "human.decision.response" events.
+// Published when an operator approves or rejects a pending decision.
+message HumanDecisionResponsePayload {
+  string         decision_id  = 1;
+  string         workflow_id  = 2;
+  DecisionAction action       = 3;
+  string         operator_id  = 4;
+  string         comment      = 5;
+  int64          responded_at = 6;
+}
+
+// DecisionConflictPayload is the payload for "decision.conflict" events.
+// Published when the coordinator detects overlapping resource usage across decisions.
+message DecisionConflictPayload {
+  string          conflict_group_id = 1;
+  repeated string decision_ids      = 2;
+  repeated string workflow_ids      = 3;
+  repeated string resource_ids      = 4;
+  int64           detected_at       = 5;
+}
+
+// DecisionResolvedPayload is the payload for "decision.resolved" events.
+// Published when a decision is approved or rejected, notifying related conflicts.
+message DecisionResolvedPayload {
+  string          decision_id          = 1;
+  string          workflow_id          = 2;
+  DecisionAction  action               = 3;
+  string          conflict_group_id    = 4;
+  repeated string related_decision_ids = 5;
+  int64           resolved_at          = 6;
+}

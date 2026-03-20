@@ -469,6 +469,225 @@ func TestWildfireWorkflowEndToEnd(t *testing.T) {
 	}
 }
 
+// TestWildfireWithHumanApproval verifies a 4-step workflow where step 2 is a
+// human approval gate: risk-estimation → resource-allocation → human approve → evacuation-planning.
+func TestWildfireWithHumanApproval(t *testing.T) {
+	env := newRuntimeEnv(t)
+	ctx := context.Background()
+
+	// Start risk and resource agents.
+	riskAgent, err := createRiskAgent(env.bus)
+	if err != nil {
+		t.Fatalf("create risk agent: %v", err)
+	}
+	if err := riskAgent.Start(ctx); err != nil {
+		t.Fatalf("start risk agent: %v", err)
+	}
+	defer func() { _ = riskAgent.Stop(ctx) }()
+
+	resourceAgent, err := createResourceAgent(env.bus)
+	if err != nil {
+		t.Fatalf("create resource agent: %v", err)
+	}
+	if err := resourceAgent.Start(ctx); err != nil {
+		t.Fatalf("start resource agent: %v", err)
+	}
+	defer func() { _ = resourceAgent.Stop(ctx) }()
+
+	// Create evacuation agent that expects 3 previous results (risk, resource, human approval).
+	evacAgent, err := sdk.New("evacuation-hitl", "wildfire-agent", "0.1.0",
+		sdk.WithEventBus(env.bus),
+	)
+	if err != nil {
+		t.Fatalf("create evac agent: %v", err)
+	}
+	evacAgent.Handle(sdk.Capability{
+		Name: "evacuation-planning", Version: "0.1.0",
+		Description: "Creates evacuation plan",
+	}, func(ctx context.Context, step *sdk.StepContext) ([]byte, error) {
+		if len(step.PreviousResults) < 3 {
+			return nil, fmt.Errorf("expected 3 previous results, got %d", len(step.PreviousResults))
+		}
+		plan := &wildfire.EvacuationPlan{
+			EvacuationZones: []*wildfire.EvacuationZone{
+				{ZoneName: "Zone-A", Priority: 1, Population: 1200, PrimaryRoute: "Highway 395 South"},
+			},
+			ShelterLocations:         []string{"Community Center - Reno"},
+			EstimatedEvacuees:        1200,
+			EstimatedCompletionHours: 12.0,
+		}
+		return proto.Marshal(plan)
+	})
+	if err := evacAgent.Start(ctx); err != nil {
+		t.Fatalf("start evac agent: %v", err)
+	}
+	defer func() { _ = evacAgent.Stop(ctx) }()
+
+	// Wait for all agents to register.
+	time.Sleep(500 * time.Millisecond)
+
+	// Track human.decision.request to get decision details.
+	decisionCh := make(chan *protocolv1.HumanDecisionRequestPayload, 1)
+	var decisionOnce sync.Once
+	_, err = env.bus.Subscribe(ctx, "human.decision.request", func(_ context.Context, evt *eventbus.Event) error {
+		req := &protocolv1.HumanDecisionRequestPayload{}
+		if err := proto.Unmarshal(evt.Payload, req); err == nil {
+			decisionOnce.Do(func() { decisionCh <- req })
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("subscribe human.decision.request: %v", err)
+	}
+
+	// Capture workflow ID.
+	wfIDCh := make(chan string, 1)
+	var wfIDOnce sync.Once
+	_, err = env.bus.Subscribe(ctx, "agent.direct.>", func(_ context.Context, evt *eventbus.Event) error {
+		if evt.WorkflowID != "" {
+			wfIDOnce.Do(func() { wfIDCh <- evt.WorkflowID })
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("subscribe agent.direct: %v", err)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Build wildfire incident.
+	incident := &wildfire.WildfireIncident{
+		IncidentId:           uuid.Must(uuid.NewV7()).String(),
+		Location:             "Sierra Nevada, CA",
+		Severity:             wildfire.Severity_SEVERITY_HIGH,
+		AffectedAreaHectares: 150.0,
+		WindSpeedKmh:         35.0,
+	}
+	incidentData, _ := proto.Marshal(incident)
+
+	// 4-step workflow: risk → resource → human approval → evacuation.
+	definition := &protocolv1.WorkflowDefinition{
+		Name:      "wildfire-emergency-with-approval",
+		Initiator: "test",
+		Steps: []*protocolv1.StepDefinition{
+			{Name: "risk-estimation", Capability: "risk-estimation", TimeoutSeconds: 60, Input: incidentData},
+			{Name: "resource-allocation", Capability: "resource-allocation", TimeoutSeconds: 60, Input: incidentData},
+			{Name: "approve-evacuation", HumanApproval: true, Prompt: "Approve evacuation plan?", ResourceIds: []string{"zone-a"}},
+			{Name: "evacuation-planning", Capability: "evacuation-planning", TimeoutSeconds: 60, Input: incidentData},
+		},
+	}
+	startPayload := &protocolv1.WorkflowStartPayload{Definition: definition}
+	data, _ := proto.Marshal(startPayload)
+
+	if err := env.bus.Publish(ctx, &eventbus.Event{
+		ID:        uuid.Must(uuid.NewV7()).String(),
+		Type:      "workflow.start",
+		Timestamp: time.Now().UnixNano(),
+		Payload:   data,
+	}); err != nil {
+		t.Fatalf("publish workflow.start: %v", err)
+	}
+
+	// Wait for workflow ID from first step dispatch.
+	var wfID string
+	select {
+	case wfID = <-wfIDCh:
+		t.Logf("Captured workflow ID: %s", wfID)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for first step dispatch")
+	}
+
+	// Wait for human.decision.request (step 2).
+	var decisionReq *protocolv1.HumanDecisionRequestPayload
+	select {
+	case decisionReq = <-decisionCh:
+		t.Logf("Received human decision request: %s", decisionReq.GetDecisionId())
+	case <-time.After(30 * time.Second):
+		t.Fatal("timed out waiting for human.decision.request")
+	}
+
+	// Verify the decision request has context.
+	if decisionReq.GetPrompt() != "Approve evacuation plan?" {
+		t.Errorf("unexpected prompt: %s", decisionReq.GetPrompt())
+	}
+	if len(decisionReq.GetPreviousResults()) < 2 {
+		t.Errorf("expected at least 2 previous results, got %d", len(decisionReq.GetPreviousResults()))
+	}
+	if decisionReq.GetWorkflowId() != wfID {
+		t.Errorf("workflow ID mismatch: %s != %s", decisionReq.GetWorkflowId(), wfID)
+	}
+
+	// Subscribe to per-workflow completion.
+	completeCh := make(chan *protocolv1.WorkflowCompletePayload, 1)
+	wfStream := fmt.Sprintf("WF-%s", wfID)
+	completeSubject := fmt.Sprintf("workflow.%s.workflow.complete", wfID)
+	_, err = env.bus.SubscribeWithStream(ctx, wfStream, completeSubject, func(_ context.Context, evt *eventbus.Event) error {
+		var payload protocolv1.WorkflowCompletePayload
+		if err := proto.Unmarshal(evt.Payload, &payload); err == nil {
+			completeCh <- &payload
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("subscribe workflow.complete: %v", err)
+	}
+
+	// Simulate operator approval by publishing human.decision.response.
+	approvalPayload := &protocolv1.HumanDecisionResponsePayload{
+		DecisionId:  decisionReq.GetDecisionId(),
+		WorkflowId:  wfID,
+		Action:      protocolv1.DecisionAction_DECISION_ACTION_APPROVE,
+		OperatorId:  "operator-jane",
+		Comment:     "Evacuation approved. Wind conditions confirm urgency.",
+		RespondedAt: time.Now().UnixNano(),
+	}
+	approvalData, _ := proto.Marshal(approvalPayload)
+
+	if err := env.bus.Publish(ctx, &eventbus.Event{
+		ID:         uuid.Must(uuid.NewV7()).String(),
+		Type:       "human.decision.response",
+		SourceNode: nodeID,
+		WorkflowID: wfID,
+		Timestamp:  time.Now().UnixNano(),
+		Payload:    approvalData,
+	}); err != nil {
+		t.Fatalf("publish human.decision.response: %v", err)
+	}
+
+	// Wait for workflow completion.
+	select {
+	case complete := <-completeCh:
+		t.Logf("Workflow %s completed with human approval", complete.WorkflowId)
+
+		if len(complete.Results) != 4 {
+			t.Fatalf("expected 4 step results, got %d", len(complete.Results))
+		}
+
+		for i, r := range complete.Results {
+			if r.Status != protocolv1.StepStatus_STEP_STATUS_SUCCESS {
+				t.Errorf("step %d: expected SUCCESS, got %v", i, r.Status)
+			}
+		}
+
+		// Step 2 (human approval) should have agent_id "human-operator".
+		if complete.Results[2].AgentId != "human-operator" {
+			t.Errorf("step 2 agent_id: expected 'human-operator', got %q", complete.Results[2].AgentId)
+		}
+
+		// Step 3 (evacuation) should have a valid result.
+		var evac wildfire.EvacuationPlan
+		if err := proto.Unmarshal(complete.Results[3].Result, &evac); err != nil {
+			t.Fatalf("unmarshal evacuation plan: %v", err)
+		}
+		if len(evac.EvacuationZones) == 0 {
+			t.Error("evacuation zones should not be empty")
+		}
+
+	case <-time.After(30 * time.Second):
+		t.Fatal("timed out waiting for workflow completion")
+	}
+}
+
 func TestAgentGracefulShutdown(t *testing.T) {
 	env := newRuntimeEnv(t)
 	ctx := context.Background()

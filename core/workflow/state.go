@@ -79,6 +79,33 @@ func (s *KVWorkflowStateStore) Get(ctx context.Context, id string) (WorkflowStat
 	return state, entry.Revision(), nil
 }
 
+// ListAll returns all workflow states in the KV store.
+// Used during startup for recovery of pending human decisions.
+func (s *KVWorkflowStateStore) ListAll(ctx context.Context) ([]WorkflowState, error) {
+	keys, err := s.kv.Keys(ctx)
+	if err != nil {
+		// If there are no keys, NATS returns ErrNoKeysFound.
+		if errors.Is(err, jetstream.ErrNoKeysFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list workflow keys: %w", err)
+	}
+
+	var states []WorkflowState
+	for _, key := range keys {
+		entry, err := s.kv.Get(ctx, key)
+		if err != nil {
+			continue
+		}
+		var state WorkflowState
+		if err := json.Unmarshal(entry.Value(), &state); err != nil {
+			continue
+		}
+		states = append(states, state)
+	}
+	return states, nil
+}
+
 func (s *KVWorkflowStateStore) Update(ctx context.Context, id string, state WorkflowState, revision uint64) error {
 	data, err := json.Marshal(state)
 	if err != nil {
