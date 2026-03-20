@@ -9,6 +9,7 @@ import (
 	"github.com/baran-network/baran-os/core/eventbus"
 	natseventbus "github.com/baran-network/baran-os/core/eventbus/nats"
 	"github.com/baran-network/baran-os/core/registry"
+	"github.com/baran-network/baran-os/core/router"
 	"github.com/baran-network/baran-os/core/testutil"
 	"github.com/baran-network/baran-os/core/workflow"
 	protocolv1 "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1"
@@ -29,7 +30,9 @@ func newTestSetup(t *testing.T, defaultTimeout time.Duration) *testSetup {
 	_, nc := testutil.StartNATS(t)
 	ctx := context.Background()
 
-	bus, err := natseventbus.NewFromConn(ctx, nc)
+	streams := router.DefaultStreamRegistry()
+
+	bus, err := natseventbus.NewFromConn(ctx, nc, streams)
 	if err != nil {
 		t.Fatalf("NewFromConn: %v", err)
 	}
@@ -45,7 +48,10 @@ func newTestSetup(t *testing.T, defaultTimeout time.Duration) *testSetup {
 		t.Fatalf("NewKVRegistry: %v", err)
 	}
 
-	engine := workflow.NewWorkflowEngine(bus, store, reg, "test-node", defaultTimeout)
+	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
+	rtr := router.NewDefaultRouter(bus, reg, streams, streamMgr)
+
+	engine := workflow.NewWorkflowEngine(bus, store, reg, streamMgr, rtr, "test-node", defaultTimeout)
 	return &testSetup{bus: bus, store: store, reg: reg, engine: engine}
 }
 

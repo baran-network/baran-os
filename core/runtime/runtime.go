@@ -187,8 +187,11 @@ func (r *Runtime) startNATS(ctx context.Context) error {
 func (r *Runtime) startSubsystems(ctx context.Context) error {
 	log := r.logger.With("component", "runtime")
 
+	// Stream Registry — shared across bus, router, and stream manager
+	streams := router.DefaultStreamRegistry()
+
 	// EventBus
-	bus, err := natseventbus.NewFromConn(ctx, r.natsConn)
+	bus, err := natseventbus.NewFromConn(ctx, r.natsConn, streams)
 	if err != nil {
 		r.shutdown(ctx)
 		return fmt.Errorf("eventbus: %w", err)
@@ -207,9 +210,11 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	r.setSubsystemStatus("registry", "up")
 	log.Info("subsystem started", "component", "registry")
 
+	// WorkflowStreamManager — uses the shared stream registry
+	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
+
 	// Event Router
-	streams := router.DefaultStreamRegistry()
-	rtr := router.NewDefaultRouter(r.bus, r.registry, streams)
+	rtr := router.NewDefaultRouter(r.bus, r.registry, streams, streamMgr)
 	r.router = rtr
 	r.setSubsystemStatus("router", "up")
 	log.Info("subsystem started", "component", "router")
@@ -230,7 +235,7 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 		r.shutdown(ctx)
 		return fmt.Errorf("workflow state store: %w", err)
 	}
-	engine := workflow.NewWorkflowEngine(r.bus, store, r.registry, r.nodeID, r.config.WorkflowTimeout)
+	engine := workflow.NewWorkflowEngine(r.bus, store, r.registry, streamMgr, rtr, r.nodeID, r.config.WorkflowTimeout)
 	wfSubs, err := engine.Start(ctx)
 	if err != nil {
 		r.shutdown(ctx)

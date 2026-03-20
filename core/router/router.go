@@ -28,20 +28,27 @@ type EventRouter interface {
 	Close() error
 }
 
+// StreamManager is the interface the router uses to delegate workflow stream creation.
+type StreamManager interface {
+	GetOrCreateStream(ctx context.Context, workflowID string) (string, error)
+}
+
 // DefaultRouter implements EventRouter by composing EventBus, AgentRegistry,
-// and StreamRegistry.
+// StreamRegistry, and StreamManager.
 type DefaultRouter struct {
-	bus      eventbus.EventBus
-	registry registry.AgentRegistry
-	streams  *StreamRegistry
+	bus       eventbus.EventBus
+	registry  registry.AgentRegistry
+	streams   *StreamRegistry
+	streamMgr StreamManager
 }
 
 // NewDefaultRouter creates a DefaultRouter.
-func NewDefaultRouter(bus eventbus.EventBus, reg registry.AgentRegistry, streams *StreamRegistry) *DefaultRouter {
+func NewDefaultRouter(bus eventbus.EventBus, reg registry.AgentRegistry, streams *StreamRegistry, streamMgr StreamManager) *DefaultRouter {
 	return &DefaultRouter{
-		bus:      bus,
-		registry: reg,
-		streams:  streams,
+		bus:       bus,
+		registry:  reg,
+		streams:   streams,
+		streamMgr: streamMgr,
 	}
 }
 
@@ -94,16 +101,12 @@ func (r *DefaultRouter) routeDirect(ctx context.Context, event *eventbus.Event) 
 	return r.bus.Publish(ctx, &directEvent)
 }
 
-// routeWorkflow creates a per-workflow stream on-demand and publishes to it.
+// routeWorkflow delegates stream creation to the StreamManager and publishes to it.
 func (r *DefaultRouter) routeWorkflow(ctx context.Context, event *eventbus.Event) error {
-	streamName := fmt.Sprintf("WF-%s", event.WorkflowID)
 	subject := fmt.Sprintf("workflow.%s.%s", event.WorkflowID, event.Type)
 
-	// Create the workflow stream on-demand if the bus supports it.
-	if creator, ok := r.bus.(eventbus.StreamCreator); ok {
-		if err := creator.EnsureStream(ctx, streamName, []string{fmt.Sprintf("workflow.%s.>", event.WorkflowID)}); err != nil {
-			return fmt.Errorf("ensure workflow stream: %w", err)
-		}
+	if _, err := r.streamMgr.GetOrCreateStream(ctx, event.WorkflowID); err != nil {
+		return fmt.Errorf("ensure workflow stream: %w", err)
 	}
 
 	wfEvent := *event

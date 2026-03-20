@@ -14,6 +14,7 @@ import (
 	"github.com/baran-network/baran-os/core/registry"
 	"github.com/baran-network/baran-os/core/router"
 	"github.com/baran-network/baran-os/core/testutil"
+	"github.com/baran-network/baran-os/core/workflow"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -239,7 +240,9 @@ func TestRouterIntegration_RegistrationFlow(t *testing.T) {
 	})
 
 	// Create router.
-	r := router.NewDefaultRouter(bus, reg, router.DefaultStreamRegistry())
+	streams := router.DefaultStreamRegistry()
+	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
+	r := router.NewDefaultRouter(bus, reg, streams, streamMgr)
 
 	time.Sleep(200 * time.Millisecond)
 
@@ -295,7 +298,9 @@ func TestRouterIntegration_HealthFlow(t *testing.T) {
 		t.Fatalf("create registry: %v", err)
 	}
 
-	r := router.NewDefaultRouter(bus, reg, router.DefaultStreamRegistry())
+	streams := router.DefaultStreamRegistry()
+	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
+	r := router.NewDefaultRouter(bus, reg, streams, streamMgr)
 
 	// Register agent directly.
 	agentID := "health-flow-" + uuid.Must(uuid.NewV7()).String()[:8]

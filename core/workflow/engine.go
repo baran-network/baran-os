@@ -19,6 +19,8 @@ type WorkflowEngine struct {
 	bus            eventbus.EventBus
 	store          WorkflowStateStore
 	registry       registry.AgentRegistry
+	streamMgr      *WorkflowStreamManager
+	publisher      eventbus.EventPublisher
 	nodeID         string
 	defaultTimeout time.Duration
 	timeouts       *StepTimeoutManager
@@ -29,6 +31,8 @@ func NewWorkflowEngine(
 	bus eventbus.EventBus,
 	store WorkflowStateStore,
 	reg registry.AgentRegistry,
+	streamMgr *WorkflowStreamManager,
+	publisher eventbus.EventPublisher,
 	nodeID string,
 	defaultTimeout time.Duration,
 ) *WorkflowEngine {
@@ -39,6 +43,8 @@ func NewWorkflowEngine(
 		bus:            bus,
 		store:          store,
 		registry:       reg,
+		streamMgr:      streamMgr,
+		publisher:      publisher,
 		nodeID:         nodeID,
 		defaultTimeout: defaultTimeout,
 		timeouts:       NewStepTimeoutManager(),
@@ -89,18 +95,15 @@ func (e *WorkflowEngine) startWorkflow(ctx context.Context, def WorkflowDefiniti
 		return fmt.Errorf("create workflow state %s: %w", workflowID, err)
 	}
 
-	// Ensure the per-workflow stream exists before subscribing to step results.
-	streamName := fmt.Sprintf("WF-%s", workflowID)
-	if creator, ok := e.bus.(eventbus.StreamCreator); ok {
-		subjects := []string{fmt.Sprintf("workflow.%s.>", workflowID)}
-		if err := creator.EnsureStream(ctx, streamName, subjects); err != nil {
-			return fmt.Errorf("ensure workflow stream %s: %w", streamName, err)
-		}
+	// Ensure the per-workflow stream exists via the stream manager.
+	streamName, err := e.streamMgr.GetOrCreateStream(ctx, workflowID)
+	if err != nil {
+		return fmt.Errorf("create workflow stream %s: %w", workflowID, err)
 	}
 
-	// Subscribe to step results for this workflow.
+	// Subscribe to step results on the specific workflow stream.
 	resultSubject := fmt.Sprintf("workflow.%s.workflow.step.result", workflowID)
-	if _, err := e.bus.Subscribe(ctx, resultSubject, e.handleWorkflowStepResult); err != nil {
+	if _, err := e.bus.SubscribeWithStream(ctx, streamName, resultSubject, e.handleWorkflowStepResult); err != nil {
 		return fmt.Errorf("subscribe to step results: %w", err)
 	}
 
@@ -159,37 +162,25 @@ func (e *WorkflowEngine) dispatchStep(ctx context.Context, workflowID string, st
 		return fmt.Errorf("marshal WorkflowStepPayload: %w", err)
 	}
 
-	// Ensure the per-workflow stream exists before publishing.
-	if creator, ok := e.bus.(eventbus.StreamCreator); ok {
-		streamName := fmt.Sprintf("WF-%s", workflowID)
-		if err := creator.EnsureStream(ctx, streamName, []string{fmt.Sprintf("workflow.%s.>", workflowID)}); err != nil {
-			return fmt.Errorf("ensure workflow stream: %w", err)
-		}
-	}
-
-	eventID := uuid.Must(uuid.NewV7()).String()
 	now := time.Now().UnixNano()
 
-	// Publish to the per-workflow stream (audit/ordering).
-	stepSubject := fmt.Sprintf("workflow.%s.workflow.step", workflowID)
-	if err := e.bus.Publish(ctx, &eventbus.Event{
-		ID:          eventID,
-		Type:        stepSubject,
+	// Publish to the per-workflow stream via router (StrategyWorkflow).
+	if err := e.publisher.Route(ctx, &eventbus.Event{
+		ID:          uuid.Must(uuid.NewV7()).String(),
+		Type:        "workflow.step",
 		SourceNode:  e.nodeID,
 		SourceAgent: "workflow-engine",
-		TargetAgent: agentID,
 		WorkflowID:  workflowID,
 		Timestamp:   now,
 		Payload:     data,
 	}); err != nil {
-		return fmt.Errorf("publish workflow.step to WF stream: %w", err)
+		return fmt.Errorf("route workflow.step to WF stream: %w", err)
 	}
 
-	// Deliver to the assigned agent via their direct subject.
-	directSubject := fmt.Sprintf("agent.direct.%s.workflow.step", agentID)
-	if err := e.bus.Publish(ctx, &eventbus.Event{
+	// Deliver to the assigned agent via router (StrategyDirect).
+	if err := e.publisher.Route(ctx, &eventbus.Event{
 		ID:          uuid.Must(uuid.NewV7()).String(),
-		Type:        directSubject,
+		Type:        "workflow.step",
 		SourceNode:  e.nodeID,
 		SourceAgent: "workflow-engine",
 		TargetAgent: agentID,
@@ -197,7 +188,7 @@ func (e *WorkflowEngine) dispatchStep(ctx context.Context, workflowID string, st
 		Timestamp:   now,
 		Payload:     data,
 	}); err != nil {
-		return fmt.Errorf("publish workflow.step to agent direct: %w", err)
+		return fmt.Errorf("route workflow.step to agent direct: %w", err)
 	}
 
 	// Schedule timeout.
@@ -286,15 +277,21 @@ func (e *WorkflowEngine) completeWorkflow(
 		return fmt.Errorf("marshal WorkflowCompletePayload: %w", err)
 	}
 
-	return e.bus.Publish(ctx, &eventbus.Event{
+	// Publish via router (StrategyWorkflow) before cleaning up the stream.
+	if err := e.publisher.Route(ctx, &eventbus.Event{
 		ID:          uuid.Must(uuid.NewV7()).String(),
-		Type:        fmt.Sprintf("workflow.%s.workflow.complete", workflowID),
+		Type:        "workflow.complete",
 		SourceNode:  e.nodeID,
 		SourceAgent: "workflow-engine",
 		WorkflowID:  workflowID,
 		Timestamp:   now,
 		Payload:     data,
-	})
+	}); err != nil {
+		return fmt.Errorf("route workflow.complete: %w", err)
+	}
+
+	e.streamMgr.Cleanup(workflowID)
+	return nil
 }
 
 // failWorkflowWithError transitions the workflow to FAILED and publishes workflow.failed.
@@ -329,23 +326,21 @@ func (e *WorkflowEngine) failWorkflowWithError(
 		return fmt.Errorf("marshal WorkflowFailedPayload: %w", err)
 	}
 
-	// Ensure per-workflow stream exists before publishing.
-	if creator, ok := e.bus.(eventbus.StreamCreator); ok {
-		streamName := fmt.Sprintf("WF-%s", workflowID)
-		if err := creator.EnsureStream(ctx, streamName, []string{fmt.Sprintf("workflow.%s.>", workflowID)}); err != nil {
-			return fmt.Errorf("ensure workflow stream: %w", err)
-		}
-	}
-
-	return e.bus.Publish(ctx, &eventbus.Event{
+	// Publish via router (StrategyWorkflow) — router ensures stream exists.
+	if err := e.publisher.Route(ctx, &eventbus.Event{
 		ID:          uuid.Must(uuid.NewV7()).String(),
-		Type:        fmt.Sprintf("workflow.%s.workflow.failed", workflowID),
+		Type:        "workflow.failed",
 		SourceNode:  e.nodeID,
 		SourceAgent: "workflow-engine",
 		WorkflowID:  workflowID,
 		Timestamp:   now,
 		Payload:     data,
-	})
+	}); err != nil {
+		return fmt.Errorf("route workflow.failed: %w", err)
+	}
+
+	e.streamMgr.Cleanup(workflowID)
+	return nil
 }
 
 // handleAgentUnregister detects when an assigned agent dies and fails its workflow.

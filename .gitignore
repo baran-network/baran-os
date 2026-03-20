@@ -6,8 +6,9 @@ CLAUDE.md
 .specify/
 specs/
 
-# Roadmap (personal reference, not for repo)
+# Internal docs (personal reference, not for repo)
 original_roadmap.md
+analysis-*.md
 
 # Go
 go.work

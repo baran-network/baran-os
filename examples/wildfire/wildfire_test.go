@@ -71,7 +71,10 @@ func newRuntimeEnv(t *testing.T) *runtimeEnv {
 	_, nc := testutil.StartNATS(t)
 	ctx := context.Background()
 
-	bus, err := natseventbus.NewFromConn(ctx, nc)
+	// Stream registry shared across bus, router, and stream manager.
+	streams := router.DefaultStreamRegistry()
+
+	bus, err := natseventbus.NewFromConn(ctx, nc, streams)
 	if err != nil {
 		t.Fatalf("create bus: %v", err)
 	}
@@ -94,16 +97,16 @@ func newRuntimeEnv(t *testing.T) *runtimeEnv {
 		}
 	})
 
-	// Router.
-	streams := router.DefaultStreamRegistry()
-	_ = router.NewDefaultRouter(bus, reg, streams)
+	// Router + WorkflowStreamManager.
+	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
+	rtr := router.NewDefaultRouter(bus, reg, streams, streamMgr)
 
 	// Workflow engine.
 	store, err := workflow.NewKVWorkflowStateStore(ctx, nc)
 	if err != nil {
 		t.Fatalf("create workflow state store: %v", err)
 	}
-	engine := workflow.NewWorkflowEngine(bus, store, reg, nodeID, 30*time.Second)
+	engine := workflow.NewWorkflowEngine(bus, store, reg, streamMgr, rtr, nodeID, 30*time.Second)
 	wfSubs, err := engine.Start(ctx)
 	if err != nil {
 		t.Fatalf("start workflow engine: %v", err)
@@ -378,8 +381,9 @@ func TestWildfireWorkflowEndToEnd(t *testing.T) {
 	completeCh := make(chan *protocolv1.WorkflowCompletePayload, 1)
 	failedCh := make(chan *protocolv1.WorkflowFailedPayload, 1)
 
+	wfStream := fmt.Sprintf("WF-%s", wfID)
 	completeSubject := fmt.Sprintf("workflow.%s.workflow.complete", wfID)
-	_, err = env.bus.Subscribe(ctx, completeSubject, func(_ context.Context, evt *eventbus.Event) error {
+	_, err = env.bus.SubscribeWithStream(ctx, wfStream, completeSubject, func(_ context.Context, evt *eventbus.Event) error {
 		var payload protocolv1.WorkflowCompletePayload
 		if err := proto.Unmarshal(evt.Payload, &payload); err == nil {
 			completeCh <- &payload
@@ -391,7 +395,7 @@ func TestWildfireWorkflowEndToEnd(t *testing.T) {
 	}
 
 	failedSubject := fmt.Sprintf("workflow.%s.workflow.failed", wfID)
-	_, err = env.bus.Subscribe(ctx, failedSubject, func(_ context.Context, evt *eventbus.Event) error {
+	_, err = env.bus.SubscribeWithStream(ctx, wfStream, failedSubject, func(_ context.Context, evt *eventbus.Event) error {
 		var payload protocolv1.WorkflowFailedPayload
 		if err := proto.Unmarshal(evt.Payload, &payload); err == nil {
 			failedCh <- &payload
@@ -505,13 +509,11 @@ func TestAgentGracefulShutdown(t *testing.T) {
 
 	// Subscribe to step results on a per-workflow stream.
 	wfID := uuid.Must(uuid.NewV7()).String()
-	if err := env.bus.EnsureStream(ctx, fmt.Sprintf("WF-%s", wfID), []string{fmt.Sprintf("workflow.%s.>", wfID)}); err != nil {
-		t.Fatalf("ensure workflow stream: %v", err)
-	}
 
 	resultCh := make(chan *protocolv1.WorkflowStepResultPayload, 1)
+	wfStream := fmt.Sprintf("WF-%s", wfID)
 	resultSubject := fmt.Sprintf("workflow.%s.workflow.step.result", wfID)
-	_, err = env.bus.Subscribe(ctx, resultSubject, func(_ context.Context, evt *eventbus.Event) error {
+	_, err = env.bus.SubscribeWithStream(ctx, wfStream, resultSubject, func(_ context.Context, evt *eventbus.Event) error {
 		var p protocolv1.WorkflowStepResultPayload
 		if err := proto.Unmarshal(evt.Payload, &p); err == nil {
 			resultCh <- &p

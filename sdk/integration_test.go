@@ -95,21 +95,14 @@ func publishDirectStep(t *testing.T, bus eventbus.EventBus, agentID, workflowID 
 }
 
 // subscribeStepResult subscribes to step results for a given workflowID and streams them to the returned channel.
+// Uses SubscribeWithStream which guarantees the stream exists before the consumer is created.
 func subscribeStepResult(t *testing.T, env *testEnv, workflowID string) <-chan *protocolv1.WorkflowStepResultPayload {
 	t.Helper()
 
-	// Ensure the per-workflow stream exists.
-	if sc, ok := env.bus.(eventbus.StreamCreator); ok {
-		wfStream := fmt.Sprintf("WF-%s", workflowID)
-		subject := fmt.Sprintf("workflow.%s.>", workflowID)
-		if err := sc.EnsureStream(context.Background(), wfStream, []string{subject}); err != nil {
-			t.Fatalf("ensure workflow stream: %v", err)
-		}
-	}
-
 	ch := make(chan *protocolv1.WorkflowStepResultPayload, 10)
+	wfStream := fmt.Sprintf("WF-%s", workflowID)
 	subject := fmt.Sprintf("workflow.%s.workflow.step.result", workflowID)
-	_, err := env.bus.Subscribe(context.Background(), subject, func(_ context.Context, evt *eventbus.Event) error {
+	_, err := env.bus.SubscribeWithStream(context.Background(), wfStream, subject, func(_ context.Context, evt *eventbus.Event) error {
 		var p protocolv1.WorkflowStepResultPayload
 		if err := proto.Unmarshal(evt.Payload, &p); err != nil {
 			return err
