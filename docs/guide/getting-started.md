@@ -32,7 +32,7 @@ INF health endpoint listening addr=127.0.0.1:8080
 INF runtime ready
 ```
 
-The runtime starts an embedded NATS server with JetStream, creates the required streams and KV buckets, and begins health monitoring.
+The runtime starts an embedded NATS server with JetStream, creates the required streams and KV buckets, and begins health monitoring. The operator UI for human-in-the-loop decisions is available at `http://localhost:8080/ui/`.
 
 ### Runtime Flags
 
@@ -103,9 +103,9 @@ Each step builds on the previous results:
 
 After starting the runtime and agents, you have:
 
-- **1 runtime** — embedded NATS server, event router, workflow engine, health monitor, capability discovery
+- **1 runtime** — embedded NATS server, event router, workflow engine, decision coordinator, health monitor, capability discovery, operator UI
 - **3 agents** — each registered with one capability, responding to health pings
-- **5 JetStream streams** — AGENTS, HEALTH, DISCOVERY, DIRECT, plus one WF-{id} stream for the workflow
+- **7 JetStream streams** — AGENTS, HEALTH, DISCOVERY, DIRECT, HUMAN, COORDINATION, plus one WF-{id} stream per workflow
 - **2 KV buckets** — `agent-registry` (agent state) and `workflow-state` (workflow state)
 
 ## Next Steps

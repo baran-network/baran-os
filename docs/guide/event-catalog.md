@@ -1,6 +1,6 @@
 # Event Catalog
 
-Baran OS uses 15 event types across 5 categories. All events are wrapped in an `AgentEvent` envelope — the envelope routes, the payload describes.
+Baran OS uses 19 event types across 6 categories. All events are wrapped in an `AgentEvent` envelope — the envelope routes, the payload describes.
 
 ## Overview
 
@@ -11,6 +11,7 @@ Baran OS uses 15 event types across 5 categories. All events are wrapped in an `
 | [Discovery](#discovery) | `agent.capability.announce`, `agent.discovery.request`, `agent.discovery.response` | 3 |
 | [Workflow](#workflow) | `workflow.start`, `workflow.step`, `workflow.step.result`, `workflow.complete`, `workflow.failed` | 5 |
 | [Workflow Query](#workflow-query) | `workflow.state.request`, `workflow.state.response` | 2 |
+| [Human Decision](#human-decision) | `human.decision.request`, `human.decision.response`, `decision.conflict`, `decision.resolved` | 4 |
 
 ## Event Envelope
 
@@ -342,7 +343,7 @@ Response with the current state of a workflow.
 | Field | Type | Description |
 |-------|------|-------------|
 | `workflow_id` | string | Workflow UUID |
-| `status` | WorkflowStatus | `CREATED`, `RUNNING`, `COMPLETED`, `FAILED` |
+| `status` | WorkflowStatus | `CREATED`, `RUNNING`, `COMPLETED`, `FAILED`, `WAITING_HUMAN` |
 | `definition` | WorkflowDefinition | Original workflow definition |
 | `current_step` | uint32 | Current step index |
 | `step_results` | repeated StepResult | Results so far |
@@ -350,6 +351,92 @@ Response with the current state of a workflow.
 | `error` | WorkflowError | Error details (if FAILED) |
 | `created_at` | int64 | Creation time (Unix nanos) |
 | `updated_at` | int64 | Last update time (Unix nanos) |
+
+---
+
+## Human Decision
+
+Human decision events implement the human-in-the-loop approval protocol. When a workflow step has `human_approval: true`, the workflow pauses in `WAITING_HUMAN` status until an operator approves or rejects.
+
+### `human.decision.request`
+
+Published when a workflow reaches a step that requires human approval.
+
+- **Emitted by**: Decision Coordinator
+- **Consumed by**: Operator UI, external integrations
+- **Stream**: HUMAN
+
+**Payload: `HumanDecisionRequestPayload`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `decision_id` | string | UUID v7, unique per decision |
+| `workflow_id` | string | Parent workflow UUID |
+| `step_index` | uint32 | 0-based step position |
+| `step_name` | string | Human-readable step name |
+| `prompt` | string | Decision question for the operator |
+| `input` | bytes | Original workflow input (serialized) |
+| `previous_results` | repeated StepResult | Results from prior steps |
+| `resource_ids` | repeated string | Resource identifiers for conflict detection |
+| `conflict_ids` | repeated string | IDs of other decisions that conflict with this one |
+
+### `human.decision.response`
+
+Published when an operator approves or rejects a decision.
+
+- **Emitted by**: Operator UI or external integration
+- **Consumed by**: Decision Coordinator → Workflow Engine
+- **Stream**: Per-workflow (WF-{id}) + HUMAN
+
+**Payload: `HumanDecisionResponsePayload`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `decision_id` | string | Which decision this responds to |
+| `workflow_id` | string | Parent workflow UUID |
+| `action` | DecisionAction | `APPROVE` or `REJECT` |
+| `operator_id` | string | Who made the decision |
+| `comment` | string | Optional reason or notes |
+| `responded_at` | int64 | Unix nanoseconds |
+
+**DecisionAction values:** `DECISION_ACTION_APPROVE`, `DECISION_ACTION_REJECT`
+
+### `decision.conflict`
+
+Published when two or more pending decisions compete for the same resources.
+
+- **Emitted by**: Decision Coordinator
+- **Consumed by**: Operator UI, monitoring
+- **Stream**: COORDINATION
+
+**Payload: `DecisionConflictPayload`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `conflict_group_id` | string | UUID v7 grouping conflicting decisions |
+| `decision_ids` | repeated string | All decision IDs in the conflict |
+| `workflow_ids` | repeated string | Corresponding workflow IDs |
+| `resource_ids` | repeated string | Overlapping resource identifiers |
+| `detected_at` | int64 | Unix nanoseconds |
+
+### `decision.resolved`
+
+Published when a decision is approved or rejected, notifying related decisions in the same conflict group.
+
+- **Emitted by**: Decision Coordinator
+- **Consumed by**: Operator UI, monitoring
+- **Stream**: COORDINATION
+
+**Payload: `DecisionResolvedPayload`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `decision_id` | string | Which decision was resolved |
+| `workflow_id` | string | Parent workflow UUID |
+| `action` | DecisionAction | `APPROVE` or `REJECT` |
+| `conflict_group_id` | string | Conflict group (empty if none) |
+| `related_decision_ids` | repeated string | Other decisions in the same conflict group |
+| `resolved_at` | int64 | Unix nanoseconds |
 
 ---
 
@@ -361,4 +448,6 @@ Response with the current state of a workflow.
 | HEALTH | `agent.health.ping`, `agent.health.pong` | 1h | Heartbeat protocol |
 | DISCOVERY | `agent.capability.announce`, `agent.discovery.*` | 24h | Capability announcements and queries |
 | DIRECT | `agent.direct.>` | 24h | Targeted agent delivery |
+| HUMAN | `human.decision.request`, `human.decision.response` | 24h | Human decision requests and responses |
+| COORDINATION | `decision.conflict`, `decision.resolved` | 24h | Cross-workflow conflict detection and resolution |
 | WF-{id} | `workflow.{id}.>` | 24h | Per-workflow events (created on demand) |

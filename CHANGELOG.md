@@ -5,6 +5,37 @@ All notable changes to Baran OS will be documented in this file.
 This project uses [Semantic Versioning](https://semver.org/) with per-module Go tags
 (`protocol/v0.1.0`, `core/v0.1.0`, `sdk/v0.1.0`).
 
+## [Unreleased]
+
+### Core (`core/`)
+
+- **Human-in-the-loop decisions**: workflow steps can require human approval via
+  `human_approval: true` in step definitions. The Decision Coordinator pauses the
+  workflow in `WAITING_HUMAN` status and publishes `human.decision.request` events.
+  Operators approve or reject through the built-in web UI or REST API. Includes
+  conflict detection when multiple decisions compete for the same resources.
+- **Operator web UI**: embedded web dashboard at `/ui/` for reviewing and acting on
+  pending decisions. Real-time updates via Server-Sent Events (SSE). REST API at
+  `/api/decisions` for programmatic integration.
+- **Decision recovery**: on startup, the coordinator scans for workflows stuck in
+  `WAITING_HUMAN` and re-publishes their decision requests.
+- **Workflow stream consolidation**: refactored per-workflow stream management for
+  cleaner lifecycle and resource cleanup.
+
+### Protocol (`protocol/`)
+
+- New `human.proto` with `HumanDecisionRequestPayload`, `HumanDecisionResponsePayload`,
+  `DecisionConflictPayload`, `DecisionResolvedPayload`, and `DecisionAction` enum
+- New `WAITING_HUMAN` workflow status in `WorkflowStatus` enum
+- Extended `StepDefinition` with `human_approval`, `prompt`, and `resource_ids` fields
+- New streams: `HUMAN` (decision events) and `COORDINATION` (conflict events)
+
+### Examples
+
+- Updated wildfire example with a human approval step (4-step workflow)
+
+---
+
 ## [v0.1.0] — 2026-03-15
 
 First public release of Baran OS — a fully functional distributed agent runtime with

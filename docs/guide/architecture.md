@@ -5,27 +5,27 @@ Baran OS is an event-driven runtime that coordinates autonomous agents through t
 ## Overview
 
 ```
-┌───────────────────────────────────────────────────┐
-│                   Baran Runtime                    │
-│                                                    │
-│  ┌──────────┐  ┌───────────┐  ┌────────────────┐  │
-│  │  Router  │  │ Workflow  │  │  Capability    │  │
-│  │          │  │  Engine   │  │  Discovery     │  │
-│  └────┬─────┘  └─────┬─────┘  └───────┬────────┘  │
-│       │               │               │            │
-│  ┌────┴───────────────┴───────────────┴─────────┐  │
-│  │           Event Bus (NATS JetStream)          │  │
-│  └────┬───────────────┬───────────────┬─────────┘  │
-│       │               │               │            │
-└───────┼───────────────┼───────────────┼────────────┘
-        │               │               │
-  ┌─────┴─────┐  ┌──────┴──────┐  ┌─────┴──────┐
-  │  Agent A  │  │   Agent B   │  │  Agent C   │
-  │  (AI/LLM) │  │ (heuristic) │  │  (sensor)  │
-  └───────────┘  └─────────────┘  └────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                        Baran Runtime                          │
+│                                                               │
+│  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌────────────┐  │
+│  │  Router  │  │ Workflow  │  │ Decision │  │ Capability │  │
+│  │          │  │  Engine   │  │Coordinator│  │ Discovery  │  │
+│  └────┬─────┘  └─────┬─────┘  └─────┬────┘  └─────┬──────┘  │
+│       │               │              │             │          │
+│  ┌────┴───────────────┴──────────────┴─────────────┴───────┐  │
+│  │              Event Bus (NATS JetStream)                   │  │
+│  └────┬───────────────┬──────────────┬─────────────┬───────┘  │
+│       │               │              │             │          │
+└───────┼───────────────┼──────────────┼─────────────┼──────────┘
+        │               │              │             │
+  ┌─────┴─────┐  ┌──────┴──────┐  ┌───┴──────┐  ┌──┴────────┐
+  │  Agent A  │  │   Agent B   │  │ Operator │  │  Agent C   │
+  │  (AI/LLM) │  │ (heuristic) │  │  (human) │  │  (sensor)  │
+  └───────────┘  └─────────────┘  └──────────┘  └────────────┘
 ```
 
-Agents are external processes that connect to the runtime over NATS. They register their capabilities, receive workflow steps matched to those capabilities, and publish results. The runtime handles everything else: routing, sequencing, state, health monitoring, and failure detection.
+Agents are external processes that connect to the runtime over NATS. They register their capabilities, receive workflow steps matched to those capabilities, and publish results. Human operators interact through a built-in web UI to approve or reject workflow steps. The runtime handles everything else: routing, sequencing, state, health monitoring, decision coordination, and failure detection.
 
 ## Components
 
@@ -84,6 +84,8 @@ The Router decides where events go. It inspects the event envelope and applies r
 | HEALTH | `agent.health.ping`, `agent.health.pong` | 1h | Health monitoring heartbeats |
 | DISCOVERY | `agent.capability.announce`, `agent.discovery.request`, `agent.discovery.response` | 24h | Capability announcements and queries |
 | DIRECT | `agent.direct.>` | 24h | Targeted agent-to-agent delivery |
+| HUMAN | `human.decision.request`, `human.decision.response` | 24h | Human decision requests and responses |
+| COORDINATION | `decision.conflict`, `decision.resolved` | 24h | Cross-workflow conflict detection and resolution |
 | WF-{id} | `workflow.{id}.>` | 24h | Per-workflow event ordering (created on demand) |
 
 ### Workflow Engine
@@ -94,8 +96,11 @@ The Workflow Engine executes multi-step workflows. Each workflow is a sequence o
 
 ```
 CREATED → RUNNING → COMPLETED
-                ↓
-              FAILED
+             ↓  ↑
+             ↓  ↑ (approve)
+       WAITING_HUMAN
+             ↓
+           FAILED ← (reject / timeout)
 ```
 
 **How it works:**
@@ -113,6 +118,7 @@ CREATED → RUNNING → COMPLETED
 
 - **Result chaining** — each step receives the results of all previous steps, enabling agents to build on prior work
 - **Step timeouts** — configurable per step (default 30 seconds). If an agent doesn't respond, the workflow fails
+- **Human approval** — steps with `human_approval: true` pause the workflow in `WAITING_HUMAN` and delegate to the Decision Coordinator
 - **State persistence** — workflow state is stored in JetStream KV with optimistic locking (Compare-And-Swap)
 - **Fail-fast** — no retries, no compensation. If a step fails, the workflow fails immediately
 
@@ -145,6 +151,51 @@ REGISTERING → ACTIVE ↔ UNHEALTHY → DEAD → UNREGISTERED
 ```
 
 If an UNHEALTHY agent responds to a ping, it transitions back to ACTIVE and its missed heartbeat counter resets.
+
+### Decision Coordinator
+
+The Decision Coordinator manages human-in-the-loop approval steps. When a workflow step requires human approval, the coordinator pauses the workflow and publishes a decision request.
+
+**How it works:**
+
+1. The workflow engine encounters a step with `human_approval: true`
+2. The coordinator transitions the workflow to `WAITING_HUMAN` and publishes `human.decision.request`
+3. The request includes the step prompt, workflow input, and all previous step results — giving the operator full context
+4. An operator reviews the decision through the built-in web UI (or any integration listening on the HUMAN stream)
+5. On **approve**: the coordinator creates a synthetic step result (agent_id = `"human-operator"`) and resumes the workflow
+6. On **reject**: the workflow transitions to `FAILED` with the operator's comment as the error message
+7. On **timeout** (default 24 hours): the workflow fails with `DECISION_TIMEOUT`
+
+**Conflict detection:**
+
+When multiple workflows request decisions that affect the same resources (identified by `resource_ids`), the coordinator detects the overlap and:
+
+- Annotates both decisions with each other's IDs (`conflict_ids`)
+- Publishes a `decision.conflict` event on the COORDINATION stream
+- The operator UI highlights conflicting decisions so operators can coordinate
+
+**Recovery:**
+
+On runtime startup, the coordinator scans the `workflow-state` KV bucket for workflows in `WAITING_HUMAN` status, repopulates its in-memory index, and re-publishes decision requests. This ensures pending decisions survive runtime restarts.
+
+### Operator UI
+
+The runtime includes a built-in web UI for operators at `http://localhost:8080/ui/`. It provides:
+
+- **Pending decisions list** — all decisions awaiting approval, sorted newest first
+- **Decision context** — step name, prompt, workflow ID, previous results
+- **Conflict indicators** — decisions competing for the same resources are highlighted
+- **Approve/Reject actions** — with optional comment field
+- **Real-time updates** — Server-Sent Events (SSE) push new decisions, conflicts, and resolutions to the browser
+
+**REST API endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/decisions` | List all pending decisions |
+| GET | `/api/decisions/{id}` | Get a single pending decision |
+| POST | `/api/decisions/{id}/respond` | Approve or reject a decision |
+| GET | `/api/decisions/stream` | SSE stream for real-time updates |
 
 ### Agent Registry
 
@@ -179,5 +230,6 @@ A typical workflow execution:
 3. **Step dispatch** — The engine finds an agent with the required capability, sends `workflow.step` to it directly.
 4. **Step execution** — The agent processes the step and publishes `workflow.step.result`.
 5. **Next step** — The engine receives the result, persists it, and dispatches the next step with all previous results.
-6. **Completion** — When all steps succeed, `workflow.complete` is published with the full result set.
-7. **Health monitoring** — Throughout this process, the health monitor pings agents and tracks their availability.
+6. **Human approval** — If the next step has `human_approval: true`, the workflow pauses in `WAITING_HUMAN`. The Decision Coordinator publishes a `human.decision.request` and waits for an operator to approve or reject via the UI or API. On approval, the workflow resumes.
+7. **Completion** — When all steps succeed, `workflow.complete` is published with the full result set.
+8. **Health monitoring** — Throughout this process, the health monitor pings agents and tracks their availability.

@@ -7,7 +7,8 @@ baran-os/
 │   ├── eventbus/            EventBus interface + NATS JetStream implementation
 │   ├── router/              Event routing (direct, broadcast, capability-based, workflow-scoped)
 │   ├── discovery/           Capability discovery protocol (announcer + handler)
-│   ├── workflow/            Workflow engine (state machine, step dispatch, timeouts)
+│   ├── workflow/            Workflow engine, decision coordinator, step dispatch, timeouts
+│   ├── runtime/             Runtime wiring, operator UI (embedded web assets)
 │   ├── health/              Health monitoring (ping/pong, agent state transitions)
 │   └── registry/            Agent and capability registry (JetStream KV-backed)
 ├── sdk/                     Go SDK for building agents

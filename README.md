@@ -58,27 +58,27 @@ Baran doesn't require agents to be AI-powered. A workflow can mix LLM-based agen
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────┐
-│                   Baran Runtime                    │
-│                                                    │
-│  ┌──────────┐  ┌───────────┐  ┌────────────────┐  │
-│  │  Router  │  │ Workflow  │  │  Capability    │  │
-│  │          │  │  Engine   │  │  Discovery     │  │
-│  └────┬─────┘  └─────┬─────┘  └───────┬────────┘  │
-│       │               │               │            │
-│  ┌────┴───────────────┴───────────────┴─────────┐  │
-│  │           Event Bus (NATS JetStream)          │  │
-│  └────┬───────────────┬───────────────┬─────────┘  │
-│       │               │               │            │
-└───────┼───────────────┼───────────────┼────────────┘
-        │               │               │
-  ┌─────┴─────┐  ┌──────┴──────┐  ┌─────┴──────┐
-  │  Agent A  │  │   Agent B   │  │  Agent C   │
-  │  (AI/LLM) │  │ (heuristic) │  │  (sensor)  │
-  └───────────┘  └─────────────┘  └────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                        Baran Runtime                          │
+│                                                               │
+│  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌────────────┐  │
+│  │  Router  │  │ Workflow  │  │ Decision │  │ Capability │  │
+│  │          │  │  Engine   │  │Coordinator│  │ Discovery  │  │
+│  └────┬─────┘  └─────┬─────┘  └─────┬────┘  └─────┬──────┘  │
+│       │               │              │             │          │
+│  ┌────┴───────────────┴──────────────┴─────────────┴───────┐  │
+│  │              Event Bus (NATS JetStream)                   │  │
+│  └────┬───────────────┬──────────────┬─────────────┬───────┘  │
+│       │               │              │             │          │
+└───────┼───────────────┼──────────────┼─────────────┼──────────┘
+        │               │              │             │
+  ┌─────┴─────┐  ┌──────┴──────┐  ┌───┴──────┐  ┌──┴────────┐
+  │  Agent A  │  │   Agent B   │  │ Operator │  │  Agent C   │
+  │  (AI/LLM) │  │ (heuristic) │  │  (human) │  │  (sensor)  │
+  └───────────┘  └─────────────┘  └──────────┘  └────────────┘
 ```
 
-Agents connect to the runtime, register their capabilities, and receive workflow steps matched to those capabilities. The runtime handles routing, sequencing, state, health monitoring, and failure detection. Agents handle domain logic.
+Agents connect to the runtime, register their capabilities, and receive workflow steps matched to those capabilities. Human operators interact through a built-in web UI to approve or reject workflow steps. The runtime handles routing, sequencing, state, health monitoring, decision coordination, and failure detection. Agents handle domain logic.
 
 ## Getting Started
 
@@ -165,7 +165,8 @@ baran-os/
 │   ├── eventbus/       EventBus interface + NATS implementation
 │   ├── router/         Event routing (direct, broadcast, capability-based)
 │   ├── discovery/      Capability discovery protocol
-│   ├── workflow/       Workflow engine (state machine, step dispatch)
+│   ├── workflow/       Workflow engine, decision coordinator, step dispatch
+│   ├── runtime/        Runtime wiring, operator UI (embedded web assets)
 │   ├── health/         Health monitoring
 │   └── registry/       Agent and capability registry (KV-backed)
 ├── sdk/                Go SDK for building agents
@@ -184,13 +185,13 @@ See the full [changelog](CHANGELOG.md) and the [documentation site](https://bara
 - Event routing (direct, broadcast, workflow-scoped, capability-based)
 - Capability discovery and registry
 - Workflow engine (sequential steps, result chaining, timeouts, failure detection)
+- Human-in-the-loop decisions (approval gates, conflict detection, operator web UI)
 - Single-binary runtime with embedded NATS
 - Go SDK for building agents
 - End-to-end wildfire example
 - Documentation site with quickstart, SDK reference, and event catalog
 
 **What's coming:**
-- Human-in-the-loop decisions (approval workflows, conflict resolution)
 - Multi-node federation (cross-node event relay, distributed capability sharing)
 - Event replay and simulation
 - Python and TypeScript SDKs
