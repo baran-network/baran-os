@@ -5,6 +5,50 @@ All notable changes to Baran OS will be documented in this file.
 This project uses [Semantic Versioning](https://semver.org/) with per-module Go tags
 (`protocol/v0.1.0`, `core/v0.1.0`, `sdk/v0.1.0`).
 
+## [v0.2.0] — 2026-03-21
+
+### Core (`core/`)
+
+- **Multi-node federation**: nodes discover each other via seed addresses using NATS leaf
+  node connections. Each node maintains a `node-registry` KV bucket with peer health status.
+  Node registration is propagated through the cluster with one-hop anti-loop protection.
+- **Distributed capability sharing**: capabilities registered on any node are propagated to
+  all federated peers via `federation.capability.announce` events. `FindByCapability` returns
+  both local and remote agents transparently; local agents are always preferred for dispatch.
+- **Cross-node event relay**: the router detects remote target agents and relays events via
+  `FederationRelayPayload` to the target node. Workflow steps execute on remote agents without
+  changes to the workflow engine or agent SDK.
+- **Federation health monitoring**: `NodeMonitor` pings peers at configurable intervals,
+  transitions nodes through `ACTIVE → UNHEALTHY → DEAD` states on missed heartbeats, and
+  triggers automatic capability purge when a node is marked `DEAD`.
+- **Dead node cleanup**: a background cycle removes `DEAD` nodes from the `node-registry`
+  after a configurable `CleanupTTL`, keeping the registry lean in long-running clusters.
+- **Federation REST API**: `GET /api/federation/nodes` returns all known nodes with status,
+  address, capabilities count, and timestamps. `GET /healthz` includes a `federation` key.
+- **Federation is opt-in**: nodes without `--federation-seeds` run in standalone mode with
+  no behavioral change.
+
+### Protocol (`protocol/`)
+
+- New `federation.proto` with `NodeRegisterPayload`, `NodeUnregisterPayload`,
+  `NodeHealthPingPayload`, `NodeHealthPongPayload`, `NodeStatus` enum,
+  `FederationCapabilityPayload`, `FederationCapabilityRemovePayload`, `FederationRelayPayload`
+- New `FEDERATION` stream (`federation.>`, 24h retention)
+- `AgentRegistration` extended with `Origin` field (`"local"` / `"remote"`) and `IsRemote()` helper
+- `StrategyRelay` added to routing strategy constants
+
+### Examples
+
+- Updated wildfire example README with multi-node federation setup: fire detection agents
+  on Node A, evacuation planner on Node B, workflow executes transparently across nodes
+
+### Documentation
+
+- New [Federation guide](docs/guide/federation.md): overview, quickstart, configuration flags,
+  node state machine, architecture diagram, REST API reference, and limitations
+
+---
+
 ## [Unreleased]
 
 ### Core (`core/`)

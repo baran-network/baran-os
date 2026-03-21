@@ -130,7 +130,7 @@ func (h *UIHandler) handleDecisions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"decisions": items,
 	})
 }
@@ -169,12 +169,12 @@ func (h *UIHandler) handleGetDecision(w http.ResponseWriter, r *http.Request, de
 	if pd == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "decision not found"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "decision not found"})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(pendingToJSON(pd))
+	_ = json.NewEncoder(w).Encode(pendingToJSON(pd))
 }
 
 // respondRequest is the JSON body for POST /api/decisions/{id}/respond.
@@ -195,7 +195,7 @@ func (h *UIHandler) handleRespond(w http.ResponseWriter, r *http.Request, decisi
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
 		return
 	}
 
@@ -209,14 +209,14 @@ func (h *UIHandler) handleRespond(w http.ResponseWriter, r *http.Request, decisi
 	default:
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid action: must be 'approve' or 'reject'"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid action: must be 'approve' or 'reject'"})
 		return
 	}
 
 	if req.OperatorID == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "operator_id is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "operator_id is required"})
 		return
 	}
 
@@ -225,7 +225,7 @@ func (h *UIHandler) handleRespond(w http.ResponseWriter, r *http.Request, decisi
 	if pd == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]string{"error": "decision already resolved"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "decision already resolved"})
 		return
 	}
 
@@ -242,7 +242,7 @@ func (h *UIHandler) handleRespond(w http.ResponseWriter, r *http.Request, decisi
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "failed to marshal response"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to marshal response"})
 		return
 	}
 
@@ -256,12 +256,12 @@ func (h *UIHandler) handleRespond(w http.ResponseWriter, r *http.Request, decisi
 	}); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "failed to publish response"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to publish response"})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":      "accepted",
 		"decision_id": decisionID,
 		"action":      req.Action,
@@ -306,7 +306,7 @@ func (h *UIHandler) handleSSE(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case evt := <-ch:
-			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", evt.Event, evt.Data)
+			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", evt.Event, evt.Data)
 			flusher.Flush()
 		}
 	}

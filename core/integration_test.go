@@ -242,7 +242,7 @@ func TestRouterIntegration_RegistrationFlow(t *testing.T) {
 	// Create router.
 	streams := router.DefaultStreamRegistry()
 	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
-	r := router.NewDefaultRouter(bus, reg, streams, streamMgr)
+	r := router.NewDefaultRouter(bus, reg, streams, streamMgr, nil)
 
 	time.Sleep(200 * time.Millisecond)
 
@@ -300,7 +300,7 @@ func TestRouterIntegration_HealthFlow(t *testing.T) {
 
 	streams := router.DefaultStreamRegistry()
 	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
-	r := router.NewDefaultRouter(bus, reg, streams, streamMgr)
+	r := router.NewDefaultRouter(bus, reg, streams, streamMgr, nil)
 
 	// Register agent directly.
 	agentID := "health-flow-" + uuid.Must(uuid.NewV7()).String()[:8]

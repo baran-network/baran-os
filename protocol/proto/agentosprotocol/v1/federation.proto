@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package agentosprotocol.v1;
+
+option go_package = "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+
+import "agentosprotocol/v1/system.proto";
+
+// NodeRegisterPayload — published when a node joins the federation.
+// Event type: node.register
+// Subject: federation.node.register
+message NodeRegisterPayload {
+  string node_id = 1;         // UUID v7 of the joining node
+  string address = 2;         // NATS leaf node address (host:port)
+  string version = 3;         // Baran OS version
+  int64 joined_at = 4;        // Unix nanos
+  int32 capabilities_count = 5; // Number of local capabilities
+}
+
+// NodeUnregisterPayload — published when a node leaves the federation gracefully.
+// Event type: node.unregister
+// Subject: federation.node.unregister
+message NodeUnregisterPayload {
+  string node_id = 1;
+  string reason = 2;          // e.g., "shutdown", "maintenance"
+}
+
+// NodeHealthPingPayload — inter-node heartbeat request.
+// Event type: node.health.ping
+// Subject: federation.node.health.ping
+message NodeHealthPingPayload {
+  string node_id = 1;         // Pinging node's ID
+  int64 sequence = 2;         // Monotonic sequence number
+}
+
+// NodeHealthPongPayload — inter-node heartbeat response.
+// Event type: node.health.pong
+// Subject: federation.node.health.pong
+message NodeHealthPongPayload {
+  string node_id = 1;         // Responding node's ID
+  int64 sequence = 2;         // Echoed sequence number
+  NodeStatus status = 3;      // Self-reported status
+  int32 agent_count = 4;      // Number of local agents
+  int32 workflow_count = 5;   // Number of active workflows
+}
+
+// NodeStatus — self-reported node health.
+enum NodeStatus {
+  NODE_STATUS_UNSPECIFIED = 0;
+  NODE_STATUS_HEALTHY = 1;
+  NODE_STATUS_DEGRADED = 2;
+  NODE_STATUS_DRAINING = 3;   // Graceful shutdown in progress
+}
+
+// FederationCapabilityPayload — propagates a local capability to peers.
+// Event type: federation.capability.announce
+// Subject: federation.capability.announce
+message FederationCapabilityPayload {
+  string node_id = 1;         // Source node
+  string agent_id = 2;        // Agent declaring the capability
+  string agent_type = 3;      // Agent type
+  repeated Capability capabilities = 4; // Uses existing Capability message
+}
+
+// FederationCapabilityRemovePayload — removes a remote capability from peers.
+// Event type: federation.capability.remove
+// Subject: federation.capability.remove
+message FederationCapabilityRemovePayload {
+  string node_id = 1;         // Source node
+  string agent_id = 2;        // Agent whose capabilities are removed
+  string reason = 3;          // e.g., "agent_unregistered", "node_dead"
+}
+
+// FederationRelayPayload — wraps an event for cross-node relay.
+// Event type: federation.relay
+// Subject: federation.relay.{target_node_id}.{original_type}
+message FederationRelayPayload {
+  string source_node_id = 1;  // Originating node
+  string target_node_id = 2;  // Destination node
+  bytes original_event = 3;   // Serialized AgentEvent (preserves original envelope)
+  string relay_id = 4;        // UUID v7 for relay dedup
+  int64 relay_timestamp = 5;  // When the relay was initiated
+}

@@ -26,7 +26,7 @@ func TestUS4_StepTimeout(t *testing.T) {
 	// Subscribe to workflow.failed.
 	var failedWg sync.WaitGroup
 	failedWg.Add(1)
-	var capturedFailed protocolv1.WorkflowFailedPayload
+	var capturedFailed *protocolv1.WorkflowFailedPayload
 	var failedOnce sync.Once
 
 	// Capture the workflow ID first.
@@ -58,7 +58,7 @@ func TestUS4_StepTimeout(t *testing.T) {
 		var fp protocolv1.WorkflowFailedPayload
 		if err := proto.Unmarshal(evt.Payload, &fp); err == nil {
 			failedOnce.Do(func() {
-				capturedFailed = fp
+				capturedFailed = proto.Clone(&fp).(*protocolv1.WorkflowFailedPayload)
 				failedWg.Done()
 			})
 		}

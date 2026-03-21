@@ -207,6 +207,64 @@ func (r *KVRegistry) IncrementMissedHeartbeats(ctx context.Context, agentID stri
 	return reg.Status, rev, nil
 }
 
+func (r *KVRegistry) RegisterRemote(ctx context.Context, reg AgentRegistration) error {
+	if reg.AgentID == "" {
+		return fmt.Errorf("%w: agent_id is required", ErrValidation)
+	}
+	if reg.NodeID == "" {
+		return fmt.Errorf("%w: node_id is required for remote registration", ErrValidation)
+	}
+
+	reg.Origin = "remote"
+	reg.Status = StatusActive
+	reg.LastSeen = time.Now()
+	reg.MissedHeartbeats = 0
+
+	key := "remote." + reg.NodeID + "." + reg.AgentID
+
+	data, err := json.Marshal(reg)
+	if err != nil {
+		return fmt.Errorf("marshal remote registration: %w", err)
+	}
+
+	_, err = r.kv.Create(ctx, key, data)
+	if err == nil {
+		return nil
+	}
+
+	entry, err := r.kv.Get(ctx, key)
+	if err != nil {
+		return fmt.Errorf("get for remote re-register: %w", err)
+	}
+
+	_, err = r.kv.Update(ctx, key, data, entry.Revision())
+	if err != nil {
+		return fmt.Errorf("update remote registration: %w", err)
+	}
+	return nil
+}
+
+func (r *KVRegistry) DeregisterRemotesByNode(ctx context.Context, nodeID string) error {
+	keys, err := r.kv.Keys(ctx)
+	if err != nil {
+		if errors.Is(err, jetstream.ErrNoKeysFound) {
+			return nil
+		}
+		return fmt.Errorf("list keys for remote deregister: %w", err)
+	}
+
+	prefix := "remote." + nodeID + "."
+	for _, key := range keys {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		if err := r.kv.Purge(ctx, key); err != nil && !errors.Is(err, jetstream.ErrKeyNotFound) {
+			return fmt.Errorf("purge remote key %s: %w", key, err)
+		}
+	}
+	return nil
+}
+
 func (r *KVRegistry) FindByCapability(ctx context.Context, capabilityName string, versionConstraint string) ([]AgentRegistration, error) {
 	all, err := r.List(ctx)
 	if err != nil {

@@ -27,7 +27,7 @@ func TestHumanApproval_Approve(t *testing.T) {
 
 	// Track workflow.step dispatches to the agent.
 	var stepMu sync.Mutex
-	var capturedSteps []protocolv1.WorkflowStepPayload
+	var capturedSteps []*protocolv1.WorkflowStepPayload
 	var stepWg sync.WaitGroup
 	stepWg.Add(1) // wait for first agent step
 
@@ -35,7 +35,7 @@ func TestHumanApproval_Approve(t *testing.T) {
 		var step protocolv1.WorkflowStepPayload
 		if err := proto.Unmarshal(evt.Payload, &step); err == nil {
 			stepMu.Lock()
-			capturedSteps = append(capturedSteps, step)
+			capturedSteps = append(capturedSteps, proto.Clone(&step).(*protocolv1.WorkflowStepPayload))
 			count := len(capturedSteps)
 			stepMu.Unlock()
 			if count == 1 {
@@ -51,14 +51,14 @@ func TestHumanApproval_Approve(t *testing.T) {
 	// Track human.decision.request events.
 	var decisionReqWg sync.WaitGroup
 	decisionReqWg.Add(1)
-	var capturedDecisionReq protocolv1.HumanDecisionRequestPayload
+	var capturedDecisionReq *protocolv1.HumanDecisionRequestPayload
 	var decisionOnce sync.Once
 
 	_, err = ts.bus.Subscribe(ctx, "human.decision.request", func(_ context.Context, evt *eventbus.Event) error {
 		var req protocolv1.HumanDecisionRequestPayload
 		if err := proto.Unmarshal(evt.Payload, &req); err == nil {
 			decisionOnce.Do(func() {
-				capturedDecisionReq = req
+				capturedDecisionReq = proto.Clone(&req).(*protocolv1.HumanDecisionRequestPayload)
 				decisionReqWg.Done()
 			})
 		}
@@ -89,7 +89,7 @@ func TestHumanApproval_Approve(t *testing.T) {
 	// Now that we have the workflow ID, subscribe to workflow.complete on the per-workflow stream.
 	var completeWg sync.WaitGroup
 	completeWg.Add(1)
-	var capturedComplete protocolv1.WorkflowCompletePayload
+	var capturedComplete *protocolv1.WorkflowCompletePayload
 	var completeOnce sync.Once
 
 	completeSubject := "workflow." + wfID + ".workflow.complete"
@@ -97,7 +97,7 @@ func TestHumanApproval_Approve(t *testing.T) {
 		var payload protocolv1.WorkflowCompletePayload
 		if err := proto.Unmarshal(evt.Payload, &payload); err == nil {
 			completeOnce.Do(func() {
-				capturedComplete = payload
+				capturedComplete = proto.Clone(&payload).(*protocolv1.WorkflowCompletePayload)
 				completeWg.Done()
 			})
 		}
@@ -158,6 +158,7 @@ func TestHumanApproval_Approve(t *testing.T) {
 	got := ts.engine.Coordinator().GetPending(capturedDecisionReq.DecisionId)
 	if got == nil {
 		t.Fatal("GetPending returned nil for known decision_id")
+		return
 	}
 	if got.DecisionID != capturedDecisionReq.DecisionId {
 		t.Errorf("GetPending().DecisionID = %q, want %q", got.DecisionID, capturedDecisionReq.DecisionId)
@@ -240,14 +241,14 @@ func TestHumanApproval_Reject(t *testing.T) {
 	// Track human.decision.request.
 	var decisionReqWg sync.WaitGroup
 	decisionReqWg.Add(1)
-	var capturedDecisionReq protocolv1.HumanDecisionRequestPayload
+	var capturedDecisionReq *protocolv1.HumanDecisionRequestPayload
 	var decisionOnce sync.Once
 
 	_, err := ts.bus.Subscribe(ctx, "human.decision.request", func(_ context.Context, evt *eventbus.Event) error {
 		var req protocolv1.HumanDecisionRequestPayload
 		if err := proto.Unmarshal(evt.Payload, &req); err == nil {
 			decisionOnce.Do(func() {
-				capturedDecisionReq = req
+				capturedDecisionReq = proto.Clone(&req).(*protocolv1.HumanDecisionRequestPayload)
 				decisionReqWg.Done()
 			})
 		}
@@ -347,14 +348,14 @@ func TestHumanApproval_DecisionContext(t *testing.T) {
 	// Track human.decision.request events.
 	var decisionReqWg sync.WaitGroup
 	decisionReqWg.Add(1)
-	var capturedReq protocolv1.HumanDecisionRequestPayload
+	var capturedReq *protocolv1.HumanDecisionRequestPayload
 	var decisionOnce sync.Once
 
 	_, err := ts.bus.Subscribe(ctx, "human.decision.request", func(_ context.Context, evt *eventbus.Event) error {
 		var req protocolv1.HumanDecisionRequestPayload
 		if err := proto.Unmarshal(evt.Payload, &req); err == nil {
 			decisionOnce.Do(func() {
-				capturedReq = req
+				capturedReq = proto.Clone(&req).(*protocolv1.HumanDecisionRequestPayload)
 				decisionReqWg.Done()
 			})
 		}
@@ -477,6 +478,7 @@ func TestHumanApproval_DecisionContext(t *testing.T) {
 	got := ts.engine.Coordinator().GetPending(capturedReq.DecisionId)
 	if got == nil {
 		t.Fatal("GetPending returned nil for known decision_id")
+		return
 	}
 	if got.DecisionID != pd.DecisionID {
 		t.Errorf("GetPending().DecisionID mismatch: %q vs %q", got.DecisionID, pd.DecisionID)
@@ -499,7 +501,7 @@ func TestConflictDetection(t *testing.T) {
 
 	// Track human.decision.request events (expect 2).
 	var decisionReqMu sync.Mutex
-	var capturedDecisionReqs []protocolv1.HumanDecisionRequestPayload
+	var capturedDecisionReqs []*protocolv1.HumanDecisionRequestPayload
 	var decisionReqWg sync.WaitGroup
 	decisionReqWg.Add(2)
 
@@ -507,7 +509,7 @@ func TestConflictDetection(t *testing.T) {
 		var req protocolv1.HumanDecisionRequestPayload
 		if err := proto.Unmarshal(evt.Payload, &req); err == nil {
 			decisionReqMu.Lock()
-			capturedDecisionReqs = append(capturedDecisionReqs, req)
+			capturedDecisionReqs = append(capturedDecisionReqs, proto.Clone(&req).(*protocolv1.HumanDecisionRequestPayload))
 			count := len(capturedDecisionReqs)
 			decisionReqMu.Unlock()
 			if count <= 2 {
@@ -523,14 +525,14 @@ func TestConflictDetection(t *testing.T) {
 	// Track decision.conflict events.
 	var conflictWg sync.WaitGroup
 	conflictWg.Add(1)
-	var capturedConflict protocolv1.DecisionConflictPayload
+	var capturedConflict *protocolv1.DecisionConflictPayload
 	var conflictOnce sync.Once
 
 	_, err = ts.bus.Subscribe(ctx, "decision.conflict", func(_ context.Context, evt *eventbus.Event) error {
 		var payload protocolv1.DecisionConflictPayload
 		if err := proto.Unmarshal(evt.Payload, &payload); err == nil {
 			conflictOnce.Do(func() {
-				capturedConflict = payload
+				capturedConflict = proto.Clone(&payload).(*protocolv1.DecisionConflictPayload)
 				conflictWg.Done()
 			})
 		}
@@ -543,14 +545,14 @@ func TestConflictDetection(t *testing.T) {
 	// Track decision.resolved events.
 	var resolvedWg sync.WaitGroup
 	resolvedWg.Add(1)
-	var capturedResolved protocolv1.DecisionResolvedPayload
+	var capturedResolved *protocolv1.DecisionResolvedPayload
 	var resolvedOnce sync.Once
 
 	_, err = ts.bus.Subscribe(ctx, "decision.resolved", func(_ context.Context, evt *eventbus.Event) error {
 		var payload protocolv1.DecisionResolvedPayload
 		if err := proto.Unmarshal(evt.Payload, &payload); err == nil {
 			resolvedOnce.Do(func() {
-				capturedResolved = payload
+				capturedResolved = proto.Clone(&payload).(*protocolv1.DecisionResolvedPayload)
 				resolvedWg.Done()
 			})
 		}

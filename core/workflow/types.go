@@ -6,7 +6,7 @@ import "time"
 type WorkflowStatus int
 
 const (
-	StatusUnspecified  WorkflowStatus = iota
+	StatusUnspecified WorkflowStatus = iota
 	StatusCreated
 	StatusRunning
 	StatusCompleted

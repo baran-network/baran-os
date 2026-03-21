@@ -14,6 +14,8 @@ const (
 	StrategyWorkflow
 	// StrategyCapability fans out to agents offering a specific capability.
 	StrategyCapability
+	// StrategyRelay forwards an event to a remote node via federation relay.
+	StrategyRelay
 )
 
 // String returns a human-readable name for the strategy.
@@ -27,6 +29,8 @@ func (s RoutingStrategy) String() string {
 		return "workflow"
 	case StrategyCapability:
 		return "capability"
+	case StrategyRelay:
+		return "relay"
 	default:
 		return "unknown"
 	}

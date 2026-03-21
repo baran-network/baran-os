@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/baran-network/baran-os/core/eventbus"
-	protocolv1 "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1"
 	"github.com/baran-network/baran-os/core/workflow"
+	protocolv1 "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 )
@@ -84,20 +84,20 @@ func TestUS2_WorkflowStepCompletion(t *testing.T) {
 	// Subscribe to workflow.complete (via the per-workflow stream — use wildcard on AGENTS).
 	var completeWg sync.WaitGroup
 	completeWg.Add(1)
-	var capturedComplete protocolv1.WorkflowCompletePayload
+	var capturedComplete *protocolv1.WorkflowCompletePayload
 	var completeOnce sync.Once
 
 	// Also capture step 1 dispatch to agent2.
 	var step1Wg sync.WaitGroup
 	step1Wg.Add(1)
-	var capturedStep1 protocolv1.WorkflowStepPayload
+	var capturedStep1 *protocolv1.WorkflowStepPayload
 	var step1Once sync.Once
 
 	_, err := ts.bus.Subscribe(ctx, "agent.direct."+agent2+".>", func(_ context.Context, evt *eventbus.Event) error {
 		var step protocolv1.WorkflowStepPayload
 		if err := proto.Unmarshal(evt.Payload, &step); err == nil {
 			step1Once.Do(func() {
-				capturedStep1 = step
+				capturedStep1 = proto.Clone(&step).(*protocolv1.WorkflowStepPayload)
 				step1Wg.Done()
 			})
 		}
@@ -123,7 +123,7 @@ func TestUS2_WorkflowStepCompletion(t *testing.T) {
 		var cp protocolv1.WorkflowCompletePayload
 		if err := proto.Unmarshal(evt.Payload, &cp); err == nil {
 			completeOnce.Do(func() {
-				capturedComplete = cp
+				capturedComplete = proto.Clone(&cp).(*protocolv1.WorkflowCompletePayload)
 				completeWg.Done()
 			})
 		}
@@ -189,7 +189,7 @@ func TestUS3_WorkflowStepFailure(t *testing.T) {
 	// Subscribe to workflow.failed via wildcard.
 	var failedWg sync.WaitGroup
 	failedWg.Add(1)
-	var capturedFailed protocolv1.WorkflowFailedPayload
+	var capturedFailed *protocolv1.WorkflowFailedPayload
 	var failedOnce sync.Once
 
 	// Start a 2-step workflow (second step should NOT be dispatched).
@@ -208,7 +208,7 @@ func TestUS3_WorkflowStepFailure(t *testing.T) {
 		var fp protocolv1.WorkflowFailedPayload
 		if err := proto.Unmarshal(evt.Payload, &fp); err == nil {
 			failedOnce.Do(func() {
-				capturedFailed = fp
+				capturedFailed = proto.Clone(&fp).(*protocolv1.WorkflowFailedPayload)
 				failedWg.Done()
 			})
 		}
@@ -292,20 +292,26 @@ func TestUS6_PreviousResultsForwarding(t *testing.T) {
 	var step1Wg, step2Wg sync.WaitGroup
 	step1Wg.Add(1)
 	step2Wg.Add(1)
-	var capturedStep1, capturedStep2 protocolv1.WorkflowStepPayload
+	var capturedStep1, capturedStep2 *protocolv1.WorkflowStepPayload
 	var step1Once, step2Once sync.Once
 
 	_, _ = ts.bus.Subscribe(ctx, "agent.direct."+agent2+".>", func(_ context.Context, evt *eventbus.Event) error {
 		var step protocolv1.WorkflowStepPayload
 		if err := proto.Unmarshal(evt.Payload, &step); err == nil {
-			step1Once.Do(func() { capturedStep1 = step; step1Wg.Done() })
+			step1Once.Do(func() {
+				capturedStep1 = proto.Clone(&step).(*protocolv1.WorkflowStepPayload)
+				step1Wg.Done()
+			})
 		}
 		return nil
 	})
 	_, _ = ts.bus.Subscribe(ctx, "agent.direct."+agent3+".>", func(_ context.Context, evt *eventbus.Event) error {
 		var step protocolv1.WorkflowStepPayload
 		if err := proto.Unmarshal(evt.Payload, &step); err == nil {
-			step2Once.Do(func() { capturedStep2 = step; step2Wg.Done() })
+			step2Once.Do(func() {
+				capturedStep2 = proto.Clone(&step).(*protocolv1.WorkflowStepPayload)
+				step2Wg.Done()
+			})
 		}
 		return nil
 	})

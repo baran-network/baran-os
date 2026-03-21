@@ -14,6 +14,7 @@ import (
 	"github.com/baran-network/baran-os/core/discovery"
 	"github.com/baran-network/baran-os/core/eventbus"
 	natseventbus "github.com/baran-network/baran-os/core/eventbus/nats"
+	"github.com/baran-network/baran-os/core/federation"
 	"github.com/baran-network/baran-os/core/health"
 	"github.com/baran-network/baran-os/core/registry"
 	"github.com/baran-network/baran-os/core/router"
@@ -42,6 +43,8 @@ type Runtime struct {
 	announcer      *discovery.CapabilityAnnouncer
 	discoveryH     *discovery.DiscoveryHandler
 	registryH      *registry.Handler
+
+	federation *federation.FederationGateway
 
 	subscriptions   []eventbus.Subscription
 	httpServer      *http.Server
@@ -81,7 +84,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 		return fmt.Errorf("start subsystems: %w", err)
 	}
 
+	r.mu.Lock()
 	r.startedAt = time.Now()
+	r.mu.Unlock()
 
 	natsURL := r.natsServer.ClientURL()
 	log.Info("runtime ready", "node_id", r.nodeID, "nats_url", natsURL)
@@ -108,6 +113,15 @@ func (r *Runtime) NATSURL() string {
 		return ""
 	}
 	return s.ClientURL()
+}
+
+// Ready returns true if all subsystems have been started and the runtime
+// is accepting events. Use this instead of NATSURL to determine when
+// the runtime is fully operational.
+func (r *Runtime) Ready() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return !r.startedAt.IsZero()
 }
 
 func (r *Runtime) startHealthHTTP() {
@@ -151,12 +165,25 @@ func (r *Runtime) startNATS(ctx context.Context) error {
 	log := r.logger.With("component", "nats")
 
 	opts := &natsserver.Options{
-		Host:         "127.0.0.1",
-		Port:         r.config.NATSPort,
-		JetStream:    true,
-		StoreDir:     r.config.NATSStoreDir,
-		NoSigs: true,
-		NoLog:  true, // we set a custom logger below
+		Host:      "127.0.0.1",
+		Port:      r.config.NATSPort,
+		JetStream: true,
+		StoreDir:  r.config.NATSStoreDir,
+		NoSigs:    true,
+		NoLog:     true, // we set a custom logger below
+	}
+
+	// Configure leaf node for federation if seeds are provided.
+	fedCfg := federation.GatewayConfig{
+		Seeds:    r.config.FederationSeeds,
+		LeafPort: r.config.FederationLeafPort,
+	}
+	if leafOpts := federation.LeafNodeServerOptions(fedCfg); leafOpts != nil {
+		opts.LeafNode = *leafOpts
+		log.Info("federation leaf node configured",
+			"leaf_port", fedCfg.LeafPort,
+			"seeds", fedCfg.Seeds,
+		)
 	}
 
 	s, err := natsserver.NewServer(opts)
@@ -217,8 +244,8 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	// WorkflowStreamManager — uses the shared stream registry
 	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
 
-	// Event Router
-	rtr := router.NewDefaultRouter(r.bus, r.registry, streams, streamMgr)
+	// Event Router (relay injected later after federation gateway is ready)
+	rtr := router.NewDefaultRouter(r.bus, r.registry, streams, streamMgr, nil)
 	r.router = rtr
 	r.setSubsystemStatus("router", "up")
 	log.Info("subsystem started", "component", "router")
@@ -306,6 +333,54 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	r.setSubsystemStatus("discovery", "up")
 	log.Info("subsystem started", "component", "discovery")
 
+	// Federation Gateway
+	fedCfg := federation.GatewayConfig{
+		Seeds:              r.config.FederationSeeds,
+		PSK:                r.config.FederationPSK,
+		HeartbeatInterval:  r.config.FederationHeartbeatInterval,
+		UnhealthyThreshold: r.config.FederationUnhealthyThreshold,
+		DeadThreshold:      r.config.FederationDeadThreshold,
+		RelayTimeout:       r.config.FederationRelayTimeout,
+		LeafPort:           r.config.FederationLeafPort,
+		CleanupTTL:         r.config.FederationCleanupTTL,
+	}
+
+	transport := federation.NewNATSLeafTransport()
+	if err := transport.Connect(ctx, r.natsConn); err != nil {
+		r.shutdown(ctx)
+		return fmt.Errorf("federation transport: %w", err)
+	}
+
+	nodeReg, err := federation.NewKVNodeRegistry(ctx, r.natsConn, fedCfg.UnhealthyThreshold, fedCfg.DeadThreshold)
+	if err != nil {
+		r.shutdown(ctx)
+		return fmt.Errorf("node registry: %w", err)
+	}
+
+	gw := federation.NewFederationGateway(
+		r.nodeID, fedCfg, r.bus, r.registry, nodeReg, transport, r.logger,
+	)
+	gw.SetLocalRouter(rtr)
+	gwSubs, err := gw.Start(ctx)
+	if err != nil {
+		r.shutdown(ctx)
+		return fmt.Errorf("federation gateway: %w", err)
+	}
+	r.federation = gw
+	r.subscriptions = append(r.subscriptions, gwSubs...)
+
+	// Inject the federation relay into the router now that the gateway is ready.
+	if gw.IsEnabled() {
+		rtr.SetRelay(gw.Relay())
+	}
+
+	// Register federation API endpoints.
+	fedHandler := NewFederationHandler(gw)
+	fedHandler.RegisterRoutes(r.httpMux)
+
+	r.setSubsystemStatus("federation", "up")
+	log.Info("subsystem started", "component", "federation", "enabled", gw.IsEnabled())
+
 	return nil
 }
 
@@ -325,6 +400,14 @@ func (r *Runtime) shutdown(ctx context.Context) {
 		_ = sub.Unsubscribe()
 	}
 	r.subscriptions = nil
+
+	// Federation gateway
+	if r.federation != nil {
+		log.Info("stopping subsystem", "component", "federation")
+		if err := r.federation.Stop(ctx); err != nil {
+			log.Error("federation gateway shutdown error", "component", "federation", "error", err)
+		}
+	}
 
 	// Health monitor
 	if r.healthMonitor != nil {

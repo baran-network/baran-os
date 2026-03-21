@@ -29,4 +29,5 @@ message AgentCapabilityMatch {
   string agent_id = 1;
   string agent_type = 2;
   repeated Capability capabilities = 3;
+  string source_node = 4;  // Node ID hosting this agent (empty = local node)
 }

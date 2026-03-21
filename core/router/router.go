@@ -33,23 +33,41 @@ type StreamManager interface {
 	GetOrCreateStream(ctx context.Context, workflowID string) (string, error)
 }
 
+// Relay is the interface the router uses for cross-node event forwarding.
+// When nil, all routing is local-only (standalone mode).
+type Relay interface {
+	Relay(ctx context.Context, targetNodeID string, event *eventbus.Event) error
+	IsRemoteAgent(ctx context.Context, agentID string) (bool, string, error)
+}
+
 // DefaultRouter implements EventRouter by composing EventBus, AgentRegistry,
-// StreamRegistry, and StreamManager.
+// StreamRegistry, StreamManager, and an optional Relay for federation.
 type DefaultRouter struct {
 	bus       eventbus.EventBus
 	registry  registry.AgentRegistry
 	streams   *StreamRegistry
 	streamMgr StreamManager
+	relay     Relay
 }
 
-// NewDefaultRouter creates a DefaultRouter.
-func NewDefaultRouter(bus eventbus.EventBus, reg registry.AgentRegistry, streams *StreamRegistry, streamMgr StreamManager) *DefaultRouter {
+// NewDefaultRouter creates a DefaultRouter. The relay parameter is optional (nil
+// in standalone mode); when set, events targeting remote agents are forwarded
+// via the federation relay instead of being published locally.
+func NewDefaultRouter(bus eventbus.EventBus, reg registry.AgentRegistry, streams *StreamRegistry, streamMgr StreamManager, relay Relay) *DefaultRouter {
 	return &DefaultRouter{
 		bus:       bus,
 		registry:  reg,
 		streams:   streams,
 		streamMgr: streamMgr,
+		relay:     relay,
 	}
+}
+
+// SetRelay injects a federation relay after construction. This supports the
+// delayed wiring pattern where the router is created before the federation
+// gateway is ready.
+func (r *DefaultRouter) SetRelay(relay Relay) {
+	r.relay = relay
 }
 
 // Route dispatches an event based on its envelope fields using the resolved strategy.
@@ -88,17 +106,44 @@ func (r *DefaultRouter) Close() error {
 }
 
 // routeDirect validates the target agent exists and publishes to its direct subject.
+// If the target agent is remote and a relay is configured, the event is forwarded
+// to the remote node instead of being published locally.
 func (r *DefaultRouter) routeDirect(ctx context.Context, event *eventbus.Event) error {
-	_, _, err := r.registry.Get(ctx, event.TargetAgent)
+	reg, _, err := r.registry.Get(ctx, event.TargetAgent)
 	if err != nil {
+		// If local lookup fails and relay is available, check remote registrations.
+		if r.relay != nil {
+			isRemote, nodeID, relayErr := r.relay.IsRemoteAgent(ctx, event.TargetAgent)
+			if relayErr == nil && isRemote {
+				return r.relayToNode(ctx, nodeID, event)
+			}
+		}
 		return r.publishError(ctx, event.SourceAgent, "ROUTER_TARGET_NOT_FOUND",
 			fmt.Sprintf("target agent %q not found in registry", event.TargetAgent))
+	}
+
+	// Check if the agent is remote and should be relayed.
+	if reg.IsRemote() && r.relay != nil && !isRelayedEvent(event) {
+		return r.relayToNode(ctx, reg.NodeID, event)
 	}
 
 	directEvent := *event
 	directEvent.Type = fmt.Sprintf("agent.direct.%s.%s", event.TargetAgent, event.Type)
 
 	return r.bus.Publish(ctx, &directEvent)
+}
+
+// relayToNode forwards an event to a remote node via the federation relay.
+func (r *DefaultRouter) relayToNode(ctx context.Context, nodeID string, event *eventbus.Event) error {
+	return r.relay.Relay(ctx, nodeID, event)
+}
+
+// isRelayedEvent returns true if the event was already relayed (to prevent loops).
+func isRelayedEvent(event *eventbus.Event) bool {
+	if event.Metadata == nil {
+		return false
+	}
+	return event.Metadata["federation.relayed"] == "true"
 }
 
 // routeWorkflow delegates stream creation to the StreamManager and publishes to it.
@@ -116,7 +161,8 @@ func (r *DefaultRouter) routeWorkflow(ctx context.Context, event *eventbus.Event
 }
 
 // routeCapability queries the registry for agents matching the requested capability
-// and fans out to each via routeDirect.
+// and fans out to each via routeDirect. When federation is enabled, local agents
+// are preferred — remote agents are only used when no local match exists.
 func (r *DefaultRouter) routeCapability(ctx context.Context, event *eventbus.Event) error {
 	capability := event.Metadata["route.capability"]
 
@@ -125,17 +171,28 @@ func (r *DefaultRouter) routeCapability(ctx context.Context, event *eventbus.Eve
 		return fmt.Errorf("list agents for capability routing: %w", err)
 	}
 
-	var matched []string
+	var local []registry.AgentRegistration
+	var remote []registry.AgentRegistration
 	for _, agent := range agents {
 		if agent.Status != registry.StatusActive {
 			continue
 		}
 		for _, cap := range agent.Capabilities {
 			if cap.Name == capability {
-				matched = append(matched, agent.AgentID)
+				if agent.IsRemote() {
+					remote = append(remote, agent)
+				} else {
+					local = append(local, agent)
+				}
 				break
 			}
 		}
+	}
+
+	// Prefer local agents; fall back to remote only when no local match.
+	matched := local
+	if len(matched) == 0 {
+		matched = remote
 	}
 
 	if len(matched) == 0 {
@@ -143,10 +200,10 @@ func (r *DefaultRouter) routeCapability(ctx context.Context, event *eventbus.Eve
 			fmt.Sprintf("no agents found with capability %q", capability))
 	}
 
-	for _, agentID := range matched {
+	for _, agent := range matched {
 		directEvent := *event
 		directEvent.ID = uuid.Must(uuid.NewV7()).String() // unique ID per fan-out to avoid dedup
-		directEvent.TargetAgent = agentID
+		directEvent.TargetAgent = agent.AgentID
 		// Remove route.capability to avoid infinite recursion through resolveStrategy.
 		meta := make(map[string]string, len(event.Metadata))
 		for k, v := range event.Metadata {

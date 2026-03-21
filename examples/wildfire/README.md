@@ -121,6 +121,73 @@ go test ./... -timeout 60s -v
 
 This runs the full workflow end-to-end in-process with an embedded NATS server — no manual setup required.
 
+## Multi-Node Federation Example
+
+With Baran OS federation, you can split agents across two runtime nodes and run the workflow transparently across them. This demonstrates cross-node capability sharing and event relay.
+
+### Setup: Node A (fire detection) + Node B (evacuation planning)
+
+**Terminal 1 — Start Node A (seed node, fire detection side):**
+
+```bash
+./baran \
+  --nats-port 4222 \
+  --health-port 8080 \
+  --federation-psk "wildfire-demo"
+```
+
+**Terminal 2 — Start Node B (joins federation, evacuation side):**
+
+```bash
+./baran \
+  --nats-port 4223 \
+  --health-port 8081 \
+  --federation-seeds "127.0.0.1:7422" \
+  --federation-psk "wildfire-demo"
+```
+
+Wait ~2 seconds and verify both nodes see each other:
+
+```bash
+curl http://localhost:8080/api/federation/nodes
+# Both nodes appear with status "ACTIVE"
+```
+
+**Terminal 3 — Risk agent (connects to Node A):**
+
+```bash
+NATS_URL=nats://localhost:4222 go run ./agents/risk
+```
+
+**Terminal 4 — Resource agent (connects to Node A):**
+
+```bash
+NATS_URL=nats://localhost:4222 go run ./agents/resource
+```
+
+**Terminal 5 — Evacuation agent (connects to Node B):**
+
+```bash
+NATS_URL=nats://localhost:4223 go run ./agents/evacuation
+```
+
+**Terminal 6 — Trigger (connects to Node A):**
+
+```bash
+NATS_URL=nats://localhost:4222 go run ./trigger
+```
+
+The workflow starts on Node A. Steps 0 and 1 run on local agents (risk + resource). Step 2 requires `evacuation.plan`, which only exists on Node B — the router relays the step transparently and the result flows back to Node A to complete the workflow.
+
+> **Note**: The agents in this example read `NATS_URL` from the environment. If your agents don't yet support this, connect them directly to the NATS server address for their target node.
+
+### What federation adds
+
+- **Capability discovery**: Node A's workflow engine sees the evacuation capability registered on Node B
+- **Transparent relay**: When step 2 dispatches, the router detects the agent is remote and relays the event via NATS leaf node connection to Node B
+- **Result routing**: The step result published on Node B is relayed back to Node A's workflow stream, completing the step
+- **Health monitoring**: If Node B goes down, Node A marks it UNHEALTHY (3 missed heartbeats) then DEAD (6 missed heartbeats), and purges its capabilities
+
 ## Troubleshooting
 
 | Problem | Solution |
@@ -130,3 +197,4 @@ This runs the full workflow end-to-end in-process with an embedded NATS server �
 | `workflow timeout` | Check agent logs for errors; increase step timeout if needed |
 | `connection refused` | Verify the runtime is running and NATS is accessible |
 | `module not found` | Run from within the `examples/wildfire/` directory |
+| Federation: `no remote capabilities` | Wait 2-3s for capability sync, then check `/api/federation/nodes` |

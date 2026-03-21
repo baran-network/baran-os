@@ -99,7 +99,7 @@ func newRuntimeEnv(t *testing.T) *runtimeEnv {
 
 	// Router + WorkflowStreamManager.
 	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
-	rtr := router.NewDefaultRouter(bus, reg, streams, streamMgr)
+	rtr := router.NewDefaultRouter(bus, reg, streams, streamMgr, nil)
 
 	// Workflow engine.
 	store, err := workflow.NewKVWorkflowStateStore(ctx, nc)

@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"log/slog"
+
 	"github.com/baran-network/baran-os/core/eventbus"
 	natseventbus "github.com/baran-network/baran-os/core/eventbus/nats"
 	"github.com/baran-network/baran-os/core/registry"
@@ -22,7 +24,6 @@ import (
 	protocolv1 "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
-	"log/slog"
 )
 
 // uiTestSetup holds all components wired with embedded NATS for UI handler testing.
@@ -58,7 +59,7 @@ func newUITestSetup(t *testing.T) *uiTestSetup {
 	}
 
 	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
-	rtr := router.NewDefaultRouter(bus, reg, streams, streamMgr)
+	rtr := router.NewDefaultRouter(bus, reg, streams, streamMgr, nil)
 	engine := workflow.NewWorkflowEngine(bus, store, reg, streamMgr, rtr, "test-node", 10*time.Second)
 
 	logger := slog.Default()
@@ -210,12 +211,12 @@ func TestUIHandler_ListAndRespond(t *testing.T) {
 	}
 	resultData, _ := proto.Marshal(stepResult)
 	if err := ts.bus.Publish(ctx, &eventbus.Event{
-		ID:         uuid.Must(uuid.NewV7()).String(),
-		Type:       fmt.Sprintf("workflow.%s.workflow.step.result", workflowID),
+		ID:          uuid.Must(uuid.NewV7()).String(),
+		Type:        fmt.Sprintf("workflow.%s.workflow.step.result", workflowID),
 		SourceAgent: agentID,
-		WorkflowID: workflowID,
-		Timestamp:  time.Now().UnixNano(),
-		Payload:    resultData,
+		WorkflowID:  workflowID,
+		Timestamp:   time.Now().UnixNano(),
+		Payload:     resultData,
 	}); err != nil {
 		t.Fatalf("publish step result: %v", err)
 	}
@@ -232,7 +233,7 @@ func TestUIHandler_ListAndRespond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/decisions: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
@@ -252,7 +253,7 @@ func TestUIHandler_ListAndRespond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/decisions/{id}: %v", err)
 	}
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	if resp2.StatusCode != 200 {
 		t.Fatalf("expected 200, got %d", resp2.StatusCode)
 	}
@@ -273,7 +274,7 @@ func TestUIHandler_ListAndRespond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET non-existent: %v", err)
 	}
-	defer resp3.Body.Close()
+	defer func() { _ = resp3.Body.Close() }()
 	if resp3.StatusCode != 404 {
 		t.Fatalf("expected 404, got %d", resp3.StatusCode)
 	}
@@ -285,7 +286,7 @@ func TestUIHandler_ListAndRespond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST invalid: %v", err)
 	}
-	defer resp4.Body.Close()
+	defer func() { _ = resp4.Body.Close() }()
 	if resp4.StatusCode != 400 {
 		t.Fatalf("expected 400 for invalid action, got %d", resp4.StatusCode)
 	}
@@ -330,7 +331,7 @@ func TestUIHandler_ListAndRespond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST approve: %v", err)
 	}
-	defer resp5.Body.Close()
+	defer func() { _ = resp5.Body.Close() }()
 	if resp5.StatusCode != 200 {
 		body, _ := io.ReadAll(resp5.Body)
 		t.Fatalf("expected 200, got %d: %s", resp5.StatusCode, body)
@@ -369,7 +370,7 @@ func TestUIHandler_ListAndRespond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET decisions after approve: %v", err)
 	}
-	defer resp6.Body.Close()
+	defer func() { _ = resp6.Body.Close() }()
 
 	var finalList struct {
 		Decisions []json.RawMessage `json:"decisions"`
@@ -387,7 +388,7 @@ func TestUIHandler_ListAndRespond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST already resolved: %v", err)
 	}
-	defer resp7.Body.Close()
+	defer func() { _ = resp7.Body.Close() }()
 	if resp7.StatusCode != 409 {
 		t.Fatalf("expected 409 for already resolved, got %d", resp7.StatusCode)
 	}
@@ -401,7 +402,7 @@ func TestUIHandler_StaticAssets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /ui/index.html: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
@@ -414,7 +415,7 @@ func TestUIHandler_StaticAssets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /ui/app.js: %v", err)
 	}
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	if resp2.StatusCode != 200 {
 		t.Fatalf("expected 200 for app.js, got %d", resp2.StatusCode)
 	}

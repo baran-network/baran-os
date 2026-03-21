@@ -68,10 +68,15 @@ func (h *DiscoveryHandler) handleDiscoveryRequest(ctx context.Context, evt *even
 				Parameters:  c.Parameters,
 			}
 		}
+		sourceNode := agent.NodeID
+		if !agent.IsRemote() {
+			sourceNode = h.nodeID
+		}
 		matches[i] = &protocolv1.AgentCapabilityMatch{
 			AgentId:      agent.AgentID,
 			AgentType:    agent.AgentType,
 			Capabilities: caps,
+			SourceNode:   sourceNode,
 		}
 	}
 

@@ -40,7 +40,7 @@ func setupRouter(t *testing.T) (*router.DefaultRouter, *registry.KVRegistry, eve
 	}
 
 	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
-	r := router.NewDefaultRouter(bus, reg, streams, streamMgr)
+	r := router.NewDefaultRouter(bus, reg, streams, streamMgr, nil)
 
 	return r, reg, bus
 }

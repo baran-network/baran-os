@@ -72,6 +72,11 @@ func DefaultStreamRegistry() *StreamRegistry {
 			Subjects: []string{"decision.conflict", "decision.resolved"},
 			MaxAge:   24 * time.Hour,
 		},
+		StreamConfig{
+			Name:     "FEDERATION",
+			Subjects: []string{"federation.>"},
+			MaxAge:   24 * time.Hour,
+		},
 	)
 }
 

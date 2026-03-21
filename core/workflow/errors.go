@@ -12,11 +12,11 @@ var (
 
 // Error codes used in WorkflowError.
 const (
-	ErrCodeStepTimeout        = "STEP_TIMEOUT"
-	ErrCodeAgentUnavailable   = "AGENT_UNAVAILABLE"
-	ErrCodeStepFailed         = "STEP_FAILED"
-	ErrCodeInvalidDefinition  = "INVALID_DEFINITION"
-	ErrCodeWorkflowNotFound   = "WORKFLOW_NOT_FOUND"
+	ErrCodeStepTimeout       = "STEP_TIMEOUT"
+	ErrCodeAgentUnavailable  = "AGENT_UNAVAILABLE"
+	ErrCodeStepFailed        = "STEP_FAILED"
+	ErrCodeInvalidDefinition = "INVALID_DEFINITION"
+	ErrCodeWorkflowNotFound  = "WORKFLOW_NOT_FOUND"
 )
 
 // WorkflowError holds structured error details for a failed step or workflow.

@@ -13,7 +13,13 @@ type AgentRegistration struct {
 	LastSeen         time.Time
 	MissedHeartbeats int32
 	NodeID           string
+	Origin           string // "local" or "remote"
 	Revision         uint64
+}
+
+// IsRemote returns true if this registration originates from a remote node.
+func (r AgentRegistration) IsRemote() bool {
+	return r.Origin == "remote"
 }
 
 // Capability represents a declared ability of an agent.
