@@ -13,6 +13,7 @@ import (
 	wildfire "github.com/baran-network/baran-os/examples/wildfire/proto/gen"
 	protocolv1 "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1"
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -88,24 +89,36 @@ func main() {
 	}
 
 	// Subscribe to workflow completion/failure events before publishing start.
+	// Use a core NATS subscription (not JetStream) because per-workflow streams
+	// are created dynamically and we don't know the workflow ID yet. Core NATS
+	// subscribers receive JetStream-published messages on matching subjects.
 	completeCh := make(chan *protocolv1.WorkflowCompletePayload, 1)
 	failedCh := make(chan *protocolv1.WorkflowFailedPayload, 1)
 
-	// We subscribe to "workflow.>" to catch all workflow events since we don't know the ID yet.
-	sub, err := bus.Subscribe(ctx, "workflow.>", func(ctx context.Context, event *eventbus.Event) error {
+	nc, err := nats.Connect(*natsURL)
+	if err != nil {
+		logger.Error("failed to connect to NATS for subscription", "error", err)
+		os.Exit(1)
+	}
+	defer nc.Close()
+
+	sub, err := nc.Subscribe("workflow.*.workflow.>", func(msg *nats.Msg) {
+		var pbEvent protocolv1.AgentEvent
+		if err := proto.Unmarshal(msg.Data, &pbEvent); err != nil {
+			return
+		}
 		switch {
-		case containsSuffix(event.Type, "workflow.complete"):
+		case containsSuffix(pbEvent.Type, "workflow.complete"):
 			var payload protocolv1.WorkflowCompletePayload
-			if err := proto.Unmarshal(event.Payload, &payload); err == nil {
+			if err := proto.Unmarshal(pbEvent.Payload, &payload); err == nil {
 				completeCh <- &payload
 			}
-		case containsSuffix(event.Type, "workflow.failed"):
+		case containsSuffix(pbEvent.Type, "workflow.failed"):
 			var payload protocolv1.WorkflowFailedPayload
-			if err := proto.Unmarshal(event.Payload, &payload); err == nil {
+			if err := proto.Unmarshal(pbEvent.Payload, &payload); err == nil {
 				failedCh <- &payload
 			}
 		}
-		return nil
 	})
 	if err != nil {
 		logger.Error("failed to subscribe", "error", err)
@@ -156,36 +169,63 @@ func printStepResult(r *protocolv1.StepResult) {
 	fmt.Printf("--- Step %d (agent: %s) ---\n", r.StepIndex, r.AgentId)
 	fmt.Printf("  Status: %s\n", r.Status.String())
 
-	switch r.StepIndex {
-	case 0:
-		var risk wildfire.RiskAssessment
-		if err := proto.Unmarshal(r.Result, &risk); err == nil {
-			fmt.Printf("  Risk Score: %.2f\n", risk.RiskScore)
-			fmt.Printf("  Threat Level: %s\n", risk.ThreatLevel.String())
-			fmt.Printf("  Spread Rate: %.1f ha/hr\n", risk.SpreadRateHectaresPerHour)
-			fmt.Printf("  Affected Zones: %v\n", risk.AffectedZones)
-		}
-	case 1:
-		var plan wildfire.ResourcePlan
-		if err := proto.Unmarshal(r.Result, &plan); err == nil {
-			fmt.Printf("  Fire Trucks: %d\n", plan.AssignedFireTrucks)
-			fmt.Printf("  Crews: %d\n", plan.AssignedCrews)
-			fmt.Printf("  Aircraft: %d\n", plan.AssignedAircraft)
-			fmt.Printf("  Staging Area: %s\n", plan.StagingArea)
-			fmt.Printf("  Response Time: %d min\n", plan.EstimatedResponseTimeMinutes)
-		}
-	case 2:
-		var evac wildfire.EvacuationPlan
-		if err := proto.Unmarshal(r.Result, &evac); err == nil {
-			fmt.Printf("  Evacuees: %d\n", evac.EstimatedEvacuees)
-			fmt.Printf("  Shelters: %v\n", evac.ShelterLocations)
-			for _, z := range evac.EvacuationZones {
-				fmt.Printf("  Zone %q (priority %d): pop %d, route: %s\n",
-					z.ZoneName, z.Priority, z.Population, z.PrimaryRoute)
+	// Try each domain type — the step index shifts when human approval is inserted.
+	if tryPrintRisk(r.Result) || tryPrintResource(r.Result) || tryPrintEvacuation(r.Result) {
+		fmt.Println()
+		return
+	}
+
+	// Human approval step or unknown payload.
+	if r.AgentId == "human-operator" {
+		var resp protocolv1.HumanDecisionResponsePayload
+		if err := proto.Unmarshal(r.Result, &resp); err == nil {
+			fmt.Printf("  Action: %s\n", resp.Action.String())
+			fmt.Printf("  Operator: %s\n", resp.OperatorId)
+			if resp.Comment != "" {
+				fmt.Printf("  Comment: %s\n", resp.Comment)
 			}
 		}
 	}
 	fmt.Println()
+}
+
+func tryPrintRisk(data []byte) bool {
+	var risk wildfire.RiskAssessment
+	if err := proto.Unmarshal(data, &risk); err != nil || risk.ThreatLevel == 0 {
+		return false
+	}
+	fmt.Printf("  Risk Score: %.2f\n", risk.RiskScore)
+	fmt.Printf("  Threat Level: %s\n", risk.ThreatLevel.String())
+	fmt.Printf("  Spread Rate: %.1f ha/hr\n", risk.SpreadRateHectaresPerHour)
+	fmt.Printf("  Affected Zones: %v\n", risk.AffectedZones)
+	return true
+}
+
+func tryPrintResource(data []byte) bool {
+	var plan wildfire.ResourcePlan
+	if err := proto.Unmarshal(data, &plan); err != nil || plan.AssignedFireTrucks == 0 {
+		return false
+	}
+	fmt.Printf("  Fire Trucks: %d\n", plan.AssignedFireTrucks)
+	fmt.Printf("  Crews: %d\n", plan.AssignedCrews)
+	fmt.Printf("  Aircraft: %d\n", plan.AssignedAircraft)
+	fmt.Printf("  Staging Area: %s\n", plan.StagingArea)
+	fmt.Printf("  Response Time: %d min\n", plan.EstimatedResponseTimeMinutes)
+	return true
+}
+
+func tryPrintEvacuation(data []byte) bool {
+	var evac wildfire.EvacuationPlan
+	if err := proto.Unmarshal(data, &evac); err != nil || evac.EstimatedEvacuees == 0 {
+		return false
+	}
+	fmt.Printf("  Evacuees: %d\n", evac.EstimatedEvacuees)
+	fmt.Printf("  Shelters: %v\n", evac.ShelterLocations)
+	for _, z := range evac.EvacuationZones {
+		fmt.Printf("  Zone %q (priority %d): pop %d, route: %s\n",
+			z.ZoneName, z.Priority, z.Population, z.PrimaryRoute)
+	}
+	return true
 }
 
 func containsSuffix(eventType, suffix string) bool {
