@@ -4,7 +4,7 @@
 
 Named after [Paul Baran](https://en.wikipedia.org/wiki/Paul_Baran), pioneer of distributed networks, Baran OS is an event-driven runtime where autonomous agents — AI-powered or not — discover each other, collaborate through typed events, and execute multi-step workflows without ever communicating directly.
 
-[![Version](https://img.shields.io/badge/version-v0.2.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.3.0-blue)](CHANGELOG.md)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![NATS](https://img.shields.io/badge/NATS-JetStream-27AAE1?logo=nats.io&logoColor=white)](https://nats.io)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -167,6 +167,7 @@ baran-os/
 │   ├── discovery/      Capability discovery protocol
 │   ├── workflow/       Workflow engine, decision coordinator, step dispatch
 │   ├── federation/     Multi-node federation (discovery, relay, capability sync)
+│   ├── simulation/     EventStore + ReplayEngine (event queries and replay)
 │   ├── runtime/        Runtime wiring, operator UI (embedded web assets)
 │   ├── health/         Health monitoring
 │   └── registry/       Agent and capability registry (KV-backed)
@@ -178,7 +179,7 @@ baran-os/
 
 ## Status
 
-Baran OS **v0.2.0** adds multi-node federation to the core runtime.
+Baran OS **v0.3.0** adds event replay and simulation to the core runtime.
 See the full [changelog](CHANGELOG.md) and the [documentation site](https://baran-network.github.io/baran-os/).
 
 **What works today:**
@@ -188,13 +189,14 @@ See the full [changelog](CHANGELOG.md) and the [documentation site](https://bara
 - Workflow engine (sequential steps, result chaining, timeouts, failure detection)
 - Human-in-the-loop decisions (approval gates, conflict detection, operator web UI)
 - **Multi-node federation** — node discovery, capability sharing, cross-node event relay, health monitoring, automatic dead-node cleanup
+- **Event replay & simulation** — query historical events, replay completed workflows on an isolated SIMULATION stream, real-time SSE streaming
 - Single-binary runtime with embedded NATS
 - Go SDK for building agents
 - End-to-end wildfire example (single-node and multi-node federation)
-- Documentation site with quickstart, SDK reference, event catalog, and federation guide
+- Documentation site with quickstart, SDK reference, event catalog, federation guide, and simulation guide
 
 **What's coming:**
-- Event replay and simulation
+- Scenario runner and synthetic event injection
 - Python and TypeScript SDKs
 
 ## Development

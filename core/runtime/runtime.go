@@ -18,6 +18,7 @@ import (
 	"github.com/baran-network/baran-os/core/health"
 	"github.com/baran-network/baran-os/core/registry"
 	"github.com/baran-network/baran-os/core/router"
+	"github.com/baran-network/baran-os/core/simulation"
 	"github.com/baran-network/baran-os/core/workflow"
 	"github.com/google/uuid"
 	natsserver "github.com/nats-io/nats-server/v2/server"
@@ -221,12 +222,13 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	// Stream Registry — shared across bus, router, and stream manager
 	streams := router.DefaultStreamRegistry()
 
-	// EventBus
-	bus, err := natseventbus.NewFromConn(ctx, r.natsConn, streams)
+	// EventBus (keep concrete type to access JetStream handle for EventStore)
+	natsbus, err := natseventbus.NewFromConn(ctx, r.natsConn, streams)
 	if err != nil {
 		r.shutdown(ctx)
 		return fmt.Errorf("eventbus: %w", err)
 	}
+	bus := eventbus.EventBus(natsbus)
 	r.bus = bus
 	r.setSubsystemStatus("eventbus", "up")
 	log.Info("subsystem started", "component", "eventbus")
@@ -242,7 +244,7 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	log.Info("subsystem started", "component", "registry")
 
 	// WorkflowStreamManager — uses the shared stream registry
-	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
+	streamMgr := workflow.NewWorkflowStreamManager(natsbus, streams)
 
 	// Event Router (relay injected later after federation gateway is ready)
 	rtr := router.NewDefaultRouter(r.bus, r.registry, streams, streamMgr, nil)
@@ -380,6 +382,13 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 
 	r.setSubsystemStatus("federation", "up")
 	log.Info("subsystem started", "component", "federation", "enabled", gw.IsEnabled())
+
+	// EventStore + ReplayEngine — access JetStream directly via concrete NATS bus.
+	eventStore := simulation.NewJetStreamEventStore(natsbus.JetStream(), streams)
+	replayEngine := simulation.NewReplayEngine(eventStore, bus, natsbus.JetStream(), r.nodeID)
+	replayHandler := NewReplayHandler(eventStore, replayEngine)
+	replayHandler.RegisterRoutes(r.httpMux)
+	log.Info("subsystem started", "component", "simulation")
 
 	return nil
 }

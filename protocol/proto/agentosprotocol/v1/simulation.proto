@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package agentosprotocol.v1;
+
+option go_package = "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+
+// SimulationReplayStartPayload — published to SIMULATION stream when a replay session begins.
+// Event type: simulation.replay.start
+message SimulationReplayStartPayload {
+  string session_id = 1;    // UUID v7 of the replay session
+  string workflow_id = 2;   // Source workflow being replayed
+  double speed = 3;         // Playback speed factor (0 = max speed, 1.0 = real-time)
+  int32 total_events = 4;   // Total number of events to replay
+}
+
+// SimulationReplayStopPayload — published when a replay session is stopped.
+// Event type: simulation.replay.stop
+message SimulationReplayStopPayload {
+  string session_id = 1;       // UUID v7 of the replay session
+  string reason = 2;           // "operator_request" or "error"
+  int32 replayed_events = 3;   // Number of events replayed before stop
+}
+
+// SimulationReplayCompletePayload — published when all events have been replayed.
+// Event type: simulation.replay.complete
+message SimulationReplayCompletePayload {
+  string session_id = 1;    // UUID v7 of the replay session
+  int32 total_events = 2;   // Total events replayed
+  int64 duration_ms = 3;    // Replay duration in milliseconds
+}

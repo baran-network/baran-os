@@ -188,6 +188,78 @@ The workflow starts on Node A. Steps 0 and 1 run on local agents (risk + resourc
 - **Result routing**: The step result published on Node B is relayed back to Node A's workflow stream, completing the step
 - **Health monitoring**: If Node B goes down, Node A marks it UNHEALTHY (3 missed heartbeats) then DEAD (6 missed heartbeats), and purges its capabilities
 
+## Replaying a Workflow
+
+After completing the wildfire workflow, you can replay it to review the event sequence step by step. This uses the EventStore and ReplayEngine introduced in v0.3.0.
+
+### 1. Find the workflow ID
+
+The trigger prints the workflow ID after completion (e.g., `Workflow ID: 01961234-...`). You can also query recent events:
+
+```bash
+# Get all workflow.complete events from the last hour
+curl -s "http://localhost:8080/api/events?start=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)&type=workflow.complete" | jq '.events[].event.workflow_id'
+```
+
+### 2. Query the workflow's events
+
+```bash
+# Get all events for the workflow
+curl -s "http://localhost:8080/api/events/workflows/{workflow_id}" | jq '.total'
+# Should show ~10+ events (start, steps, step results, complete)
+```
+
+### 3. Create a replay session
+
+```bash
+# Max speed replay (speed=0, default)
+curl -s -X POST http://localhost:8080/api/replay/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "YOUR_WORKFLOW_ID"}' | jq .
+```
+
+The session starts immediately and replays all events to the SIMULATION stream.
+
+### 4. Stream replay events in real time
+
+Open a second terminal to watch events via SSE:
+
+```bash
+curl -N http://localhost:8080/api/replay/sessions/{session_id}/stream
+```
+
+You'll see events like:
+
+```
+event: replay.event
+data: {"event":{...},"stream":"WF-...","sequence":1,"position":1,"total":12}
+
+event: replay.complete
+data: {"session_id":"...","total_replayed":12}
+```
+
+### 5. Real-time replay
+
+To replay with original timing (useful for watching the workflow unfold as it originally happened):
+
+```bash
+curl -s -X POST http://localhost:8080/api/replay/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "YOUR_WORKFLOW_ID", "speed": 1.0}'
+```
+
+### 6. Check session status
+
+```bash
+# List all sessions
+curl -s http://localhost:8080/api/replay/sessions | jq '.sessions[] | {id, state, replayed_events, total_events}'
+
+# Get a specific session
+curl -s http://localhost:8080/api/replay/sessions/{session_id} | jq .
+```
+
+> **Note**: Replayed events are fully isolated on the SIMULATION stream. Live agents never see them, and no workflow state is modified.
+
 ## Troubleshooting
 
 | Problem | Solution |

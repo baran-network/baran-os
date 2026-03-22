@@ -287,6 +287,12 @@ func (b *Bus) EnsureStream(ctx context.Context, name string, subjects []string) 
 	return nil
 }
 
+// JetStream returns the underlying JetStream handle.
+// Used by components that need direct JetStream access (e.g., EventStore).
+func (b *Bus) JetStream() jetstream.JetStream {
+	return b.js
+}
+
 // Close drains and closes the NATS connection.
 func (b *Bus) Close() error {
 	b.mu.Lock()

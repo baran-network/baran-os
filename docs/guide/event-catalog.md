@@ -1,6 +1,6 @@
 # Event Catalog
 
-Baran OS uses 19 event types across 6 categories. All events are wrapped in an `AgentEvent` envelope — the envelope routes, the payload describes.
+Baran OS uses 22 event types across 7 categories. All events are wrapped in an `AgentEvent` envelope — the envelope routes, the payload describes.
 
 ## Overview
 
@@ -12,6 +12,7 @@ Baran OS uses 19 event types across 6 categories. All events are wrapped in an `
 | [Workflow](#workflow) | `workflow.start`, `workflow.step`, `workflow.step.result`, `workflow.complete`, `workflow.failed` | 5 |
 | [Workflow Query](#workflow-query) | `workflow.state.request`, `workflow.state.response` | 2 |
 | [Human Decision](#human-decision) | `human.decision.request`, `human.decision.response`, `decision.conflict`, `decision.resolved` | 4 |
+| [Simulation](#simulation) | `simulation.replay.start`, `simulation.replay.stop`, `simulation.replay.complete` | 3 |
 
 ## Event Envelope
 
@@ -440,6 +441,61 @@ Published when a decision is approved or rejected, notifying related decisions i
 
 ---
 
+## Simulation
+
+Simulation events coordinate replay sessions on the isolated SIMULATION stream. See the [Event Replay & Simulation](simulation.md) guide for full details.
+
+### `simulation.replay.start`
+
+Published when a replay session begins executing.
+
+- **Emitted by**: ReplayEngine
+- **Consumed by**: SSE stream clients, monitoring
+- **Stream**: SIMULATION
+
+**Payload: `SimulationReplayStartPayload`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `session_id` | string | UUID v7 of the replay session |
+| `workflow_id` | string | Workflow being replayed |
+| `speed` | double | Playback speed (0 = max) |
+| `total_events` | int32 | Total events to replay |
+
+### `simulation.replay.stop`
+
+Published when a replay session is stopped by operator request or due to an error.
+
+- **Emitted by**: ReplayEngine
+- **Consumed by**: SSE stream clients, monitoring
+- **Stream**: SIMULATION
+
+**Payload: `SimulationReplayStopPayload`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `session_id` | string | UUID v7 of the replay session |
+| `reason` | string | `"operator_request"` or `"error"` |
+| `replayed_events` | int32 | Number of events replayed before stop |
+
+### `simulation.replay.complete`
+
+Published when all events in a replay session have been replayed.
+
+- **Emitted by**: ReplayEngine
+- **Consumed by**: SSE stream clients, monitoring
+- **Stream**: SIMULATION
+
+**Payload: `SimulationReplayCompletePayload`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `session_id` | string | UUID v7 of the replay session |
+| `total_events` | int32 | Total events replayed |
+| `duration_ms` | int64 | Replay duration in milliseconds |
+
+---
+
 ## Stream Routing Summary
 
 | Stream | Subjects | Max Age | Events |
@@ -450,4 +506,5 @@ Published when a decision is approved or rejected, notifying related decisions i
 | DIRECT | `agent.direct.>` | 24h | Targeted agent delivery |
 | HUMAN | `human.decision.request`, `human.decision.response` | 24h | Human decision requests and responses |
 | COORDINATION | `decision.conflict`, `decision.resolved` | 24h | Cross-workflow conflict detection and resolution |
+| SIMULATION | `simulation.>` | 24h | Replay events and coordination |
 | WF-{id} | `workflow.{id}.>` | 24h | Per-workflow events (created on demand) |

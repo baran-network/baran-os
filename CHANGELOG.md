@@ -5,6 +5,51 @@ All notable changes to Baran OS will be documented in this file.
 This project uses [Semantic Versioning](https://semver.org/) with per-module Go tags
 (`protocol/v0.1.0`, `core/v0.1.0`, `sdk/v0.1.0`).
 
+## [v0.3.0] — 2026-03-22
+
+### Core (`core/`)
+
+- **EventStore**: Query historical events from existing JetStream streams by time range,
+  event type, workflow ID, and source agent. Reads directly from JetStream using ordered
+  consumers with `DeliverByStartTimePolicy` — no duplication of stored events.
+- **ReplayEngine**: Replay completed workflows on an isolated SIMULATION stream. Supports
+  configurable speed (real-time, accelerated, max speed), session state machine
+  (PENDING → RUNNING → COMPLETED/STOPPED/ERROR), and in-memory session management.
+- **Replay isolation**: Replayed events receive new UUID v7 IDs and metadata markers
+  (`simulation.replay=true`, `simulation.session_id`, `simulation.original_timestamp`,
+  `simulation.original_id`). Events are published exclusively to the SIMULATION stream —
+  live agents and workflow streams are never affected.
+- **Replay REST API**: Full lifecycle management via REST — create sessions
+  (`POST /api/replay/sessions`), list/filter sessions (`GET /api/replay/sessions`),
+  inspect sessions (`GET /api/replay/sessions/{id}`), stop sessions
+  (`POST /api/replay/sessions/{id}/stop`).
+- **Event query REST API**: `GET /api/events` with time range, event type, workflow ID,
+  source agent filters, and pagination. `GET /api/events/workflows/{id}` for per-workflow
+  event history.
+- **SSE replay streaming**: `GET /api/replay/sessions/{id}/stream` delivers replay events
+  in real time via Server-Sent Events (`replay.event`, `replay.complete`, `replay.stopped`,
+  `replay.error`).
+
+### Protocol (`protocol/`)
+
+- New `simulation.proto` with `SimulationReplayStartPayload`, `SimulationReplayStopPayload`,
+  `SimulationReplayCompletePayload` messages
+- New `SIMULATION` stream (`simulation.>`, 24h retention)
+
+### Examples
+
+- Added replay demo instructions to wildfire example: query workflow events and replay
+  a completed workflow using the REST API
+
+### Documentation
+
+- New [Event Replay & Simulation guide](docs/guide/simulation.md): EventStore, ReplayEngine,
+  REST API reference, session lifecycle, replay isolation, and architecture notes
+- Updated event catalog with simulation event category (3 new event types) and SIMULATION stream
+- Updated README with event replay capability
+
+---
+
 ## [v0.2.0] — 2026-03-21
 
 ### Core (`core/`)
