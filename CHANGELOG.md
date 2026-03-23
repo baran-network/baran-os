@@ -5,6 +5,53 @@ All notable changes to Baran OS will be documented in this file.
 This project uses [Semantic Versioning](https://semver.org/) with per-module Go tags
 (`protocol/v0.1.0`, `core/v0.1.0`, `sdk/v0.1.0`).
 
+## [v0.4.0] — 2026-03-22
+
+### Core (`core/`)
+
+- **Scenario Runner**: Define and execute simulation scenarios — scripted sequences
+  of synthetic events with per-step delays and optional conditions. Scenarios are
+  JSON-defined, registered via REST API, and executed by the ScenarioEngine with
+  full lifecycle tracking (REGISTERED → RUNNING → COMPLETED/STOPPED/FAILED).
+- **EventInjector**: Inject ad-hoc synthetic events into the SIMULATION stream via
+  `POST /api/simulation/inject`. Each synthetic event carries metadata markers
+  (`simulation.synthetic`, `simulation.session_id`, `simulation.scenario_name`)
+  for isolation from live traffic.
+- **Scenario REST API**: Full lifecycle management — register scenarios
+  (`POST /api/simulation/scenarios`), list/inspect scenarios, start sessions
+  (`POST /api/simulation/scenarios/{id}/start`), list/inspect sessions, stop
+  running sessions (`POST /api/simulation/sessions/{id}/stop`).
+- **Scenario SSE streaming**: `GET /api/simulation/sessions/{id}/stream` delivers
+  scenario events in real time via Server-Sent Events (`scenario.event`,
+  `scenario.complete`, `scenario.stopped`, `scenario.failed`). Late subscribers
+  receive terminal events immediately.
+- **Condition-based steps**: Scenario steps can wait for a matching event on the
+  SIMULATION stream before proceeding, with configurable timeout. Timeout triggers
+  scenario failure with descriptive error.
+
+### Protocol (`protocol/`)
+
+- New `SimulationStartPayload`, `SimulationStopPayload`, `SimulationInjectEventPayload`
+  messages in `simulation.proto`
+- Three new event types: `simulation.start`, `simulation.stop`, `simulation.inject_event`
+
+### Examples
+
+- New bundled wildfire simulation scenario at
+  `examples/wildfire/scenarios/wildfire-simulation.json` with 5+ event types and
+  realistic inter-step delays
+- Updated wildfire README with scenario runner instructions
+
+### Documentation
+
+- Updated [simulation guide](docs/guide/simulation.md) with scenario runner section:
+  defining scenarios, ad-hoc injection, REST API endpoints, SSE streaming, session
+  lifecycle, and synthetic event isolation
+- Updated [event catalog](docs/guide/event-catalog.md) with 3 new simulation event
+  types (25 total across 7 categories)
+
+---
+
 ## [v0.3.0] — 2026-03-22
 
 ### Core (`core/`)

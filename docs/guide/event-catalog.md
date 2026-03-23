@@ -1,6 +1,6 @@
 # Event Catalog
 
-Baran OS uses 22 event types across 7 categories. All events are wrapped in an `AgentEvent` envelope — the envelope routes, the payload describes.
+Baran OS uses 25 event types across 7 categories. All events are wrapped in an `AgentEvent` envelope — the envelope routes, the payload describes.
 
 ## Overview
 
@@ -12,7 +12,7 @@ Baran OS uses 22 event types across 7 categories. All events are wrapped in an `
 | [Workflow](#workflow) | `workflow.start`, `workflow.step`, `workflow.step.result`, `workflow.complete`, `workflow.failed` | 5 |
 | [Workflow Query](#workflow-query) | `workflow.state.request`, `workflow.state.response` | 2 |
 | [Human Decision](#human-decision) | `human.decision.request`, `human.decision.response`, `decision.conflict`, `decision.resolved` | 4 |
-| [Simulation](#simulation) | `simulation.replay.start`, `simulation.replay.stop`, `simulation.replay.complete` | 3 |
+| [Simulation](#simulation) | `simulation.replay.start`, `simulation.replay.stop`, `simulation.replay.complete`, `simulation.start`, `simulation.stop`, `simulation.inject_event` | 6 |
 
 ## Event Envelope
 
@@ -494,6 +494,56 @@ Published when all events in a replay session have been replayed.
 | `total_events` | int32 | Total events replayed |
 | `duration_ms` | int64 | Replay duration in milliseconds |
 
+### `simulation.start`
+
+Published when a scenario session begins executing.
+
+- **Emitted by**: ScenarioEngine
+- **Consumed by**: SSE stream clients, monitoring
+- **Stream**: SIMULATION
+
+**Payload: `SimulationStartPayload`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `session_id` | string | UUID v7 of the scenario session |
+| `scenario_name` | string | Name of the scenario being executed |
+| `total_steps` | int32 | Total steps in the scenario |
+
+### `simulation.stop`
+
+Published when a scenario session is stopped by operator request or fails due to a condition timeout.
+
+- **Emitted by**: ScenarioEngine
+- **Consumed by**: SSE stream clients, monitoring
+- **Stream**: SIMULATION
+
+**Payload: `SimulationStopPayload`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `session_id` | string | UUID v7 of the scenario session |
+| `reason` | string | `"completed"`, `"operator_request"`, `"condition_timeout"`, or `"error"` |
+| `injected_events` | int32 | Number of events injected before stop |
+| `duration_ms` | int64 | Execution duration in milliseconds |
+| `error_message` | string | Set when reason is `"error"` or `"condition_timeout"` |
+
+### `simulation.inject_event`
+
+Published for each synthetic event injected during a scenario step or ad-hoc injection.
+
+- **Emitted by**: EventInjector
+- **Consumed by**: Observers, testing tools
+- **Stream**: SIMULATION
+
+**Payload: `SimulationInjectEventPayload`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `session_id` | string | UUID v7 of the scenario session |
+| `step_index` | int32 | Which step triggered this injection |
+| `original_event_type` | string | The event type of the injected synthetic event |
+
 ---
 
 ## Stream Routing Summary
@@ -506,5 +556,5 @@ Published when all events in a replay session have been replayed.
 | DIRECT | `agent.direct.>` | 24h | Targeted agent delivery |
 | HUMAN | `human.decision.request`, `human.decision.response` | 24h | Human decision requests and responses |
 | COORDINATION | `decision.conflict`, `decision.resolved` | 24h | Cross-workflow conflict detection and resolution |
-| SIMULATION | `simulation.>` | 24h | Replay events and coordination |
+| SIMULATION | `simulation.>` | 24h | Replay events, scenario events, and synthetic injections |
 | WF-{id} | `workflow.{id}.>` | 24h | Per-workflow events (created on demand) |

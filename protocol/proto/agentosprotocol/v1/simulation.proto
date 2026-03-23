@@ -28,3 +28,29 @@ message SimulationReplayCompletePayload {
   int32 total_events = 2;   // Total events replayed
   int64 duration_ms = 3;    // Replay duration in milliseconds
 }
+
+// SimulationStartPayload — published to SIMULATION stream when a scenario session begins.
+// Event type: simulation.start
+message SimulationStartPayload {
+  string session_id = 1;      // UUID v7 of the scenario session
+  string scenario_name = 2;   // Name of the scenario being executed
+  int32 total_steps = 3;      // Number of steps in the scenario
+}
+
+// SimulationStopPayload — published when a scenario session ends (any terminal state).
+// Event type: simulation.stop
+message SimulationStopPayload {
+  string session_id = 1;       // UUID v7 of the scenario session
+  string reason = 2;           // "completed", "operator_request", "error", "condition_timeout"
+  int32 injected_events = 3;   // Number of events injected before stop
+  int64 duration_ms = 4;       // Execution duration in milliseconds
+  string error_message = 5;    // Set when reason is "error" or "condition_timeout"
+}
+
+// SimulationInjectEventPayload — published when a synthetic event is injected.
+// Event type: simulation.inject_event
+message SimulationInjectEventPayload {
+  string session_id = 1;            // UUID v7 of the scenario session
+  int32 step_index = 2;             // Which step triggered this injection
+  string original_event_type = 3;   // The event type of the injected synthetic event
+}

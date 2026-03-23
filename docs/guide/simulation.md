@@ -187,6 +187,174 @@ The SIMULATION stream is registered in the `StreamRegistry` alongside other syst
 | Max Age | 24h |
 | Retention | Limits (same as other system streams) |
 
+## Scenario Runner
+
+The scenario runner enables operators to define and execute simulation scenarios — scripted sequences of synthetic events that exercise workflows without requiring live agents. Scenarios are defined as JSON files with per-step delays and optional conditions.
+
+### Components
+
+- **EventInjector**: Publishes synthetic events to the SIMULATION stream with metadata markers
+- **ScenarioEngine**: Manages scenario definitions, session lifecycle, and sequential step execution
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Baran Runtime                        │
+│                                                        │
+│  ┌──────────────┐     ┌────────────────┐               │
+│  │ ScenarioEngine│────►│ EventInjector  │               │
+│  │  (orchestrate)│     │  (publish)     │               │
+│  └──────┬───────┘     └───────┬────────┘               │
+│         │ manages              │ writes                 │
+│  ┌──────┴───────┐     ┌───────┴────────┐               │
+│  │   Sessions   │     │  SIMULATION    │               │
+│  │  (in-memory) │     │    stream      │               │
+│  └──────────────┘     └────────────────┘               │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Defining a Scenario
+
+Scenarios are JSON objects with a name, description, and ordered steps:
+
+```json
+{
+  "name": "wildfire-north-ridge",
+  "description": "Simulates wildfire detection through evacuation",
+  "steps": [
+    {
+      "event_type": "workflow.start",
+      "delay_ms": 0,
+      "source_agent": "sensor-001",
+      "payload_json": {"workflow_name": "wildfire-response"}
+    },
+    {
+      "event_type": "workflow.step",
+      "delay_ms": 3000,
+      "source_agent": "risk-agent",
+      "payload_json": {"step_name": "risk-assessment", "risk_level": "high"}
+    },
+    {
+      "event_type": "human.decision.request",
+      "delay_ms": 1000,
+      "source_agent": "evacuation-agent",
+      "payload_json": {"question": "Approve evacuation of zones A and B?"},
+      "condition": {
+        "expect_event_type": "workflow.step",
+        "timeout_ms": 5000
+      }
+    }
+  ]
+}
+```
+
+Each step supports:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `event_type` | string | yes | Event type to inject |
+| `delay_ms` | int | no | Delay before injecting (default: 0) |
+| `source_agent` | string | no | Synthetic source agent ID |
+| `payload_json` | object | no | Arbitrary JSON payload |
+| `condition` | object | no | Wait for an event before proceeding |
+
+**Conditions** pause execution until a matching event appears on the SIMULATION stream or a timeout expires:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `expect_event_type` | string | Event type to wait for |
+| `timeout_ms` | int | Max wait time (scenario fails on timeout) |
+
+### Injecting Ad-Hoc Events
+
+Inject a single synthetic event without defining a full scenario:
+
+```bash
+curl -X POST http://localhost:8080/api/simulation/inject \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "workflow.start",
+    "source_agent": "sensor-001",
+    "payload_json": {"workflow_name": "wildfire-response"},
+    "metadata": {"zone": "north-ridge"}
+  }'
+```
+
+### Running a Scenario
+
+```bash
+# 1. Register a scenario
+curl -X POST http://localhost:8080/api/simulation/scenarios \
+  -H "Content-Type: application/json" \
+  -d @examples/wildfire/scenarios/wildfire-simulation.json
+
+# 2. Start execution (use scenario ID from step 1)
+curl -X POST http://localhost:8080/api/simulation/scenarios/{scenario_id}/start
+
+# 3. Stream events in real time (SSE)
+curl -N http://localhost:8080/api/simulation/sessions/{session_id}/stream
+
+# 4. Stop a running session
+curl -X POST http://localhost:8080/api/simulation/sessions/{session_id}/stop
+```
+
+### Scenario REST API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/simulation/inject` | Inject a single synthetic event |
+| POST | `/api/simulation/scenarios` | Register a scenario definition |
+| GET | `/api/simulation/scenarios` | List all registered scenarios |
+| GET | `/api/simulation/scenarios/{id}` | Get scenario details with steps |
+| POST | `/api/simulation/scenarios/{id}/start` | Start a scenario (creates a session) |
+| GET | `/api/simulation/sessions` | List sessions (optional `?state=` filter) |
+| GET | `/api/simulation/sessions/{id}` | Get session details |
+| POST | `/api/simulation/sessions/{id}/stop` | Stop a running session |
+| GET | `/api/simulation/sessions/{id}/stream` | SSE stream of scenario events |
+
+### SSE Event Stream
+
+Connect to `/api/simulation/sessions/{id}/stream` for real-time scenario events:
+
+```
+event: scenario.event
+data: {"event_id":"019...","event_type":"workflow.start","step_index":0,"timestamp":"..."}
+
+event: scenario.complete
+data: {"session_id":"019...","total_events":5,"duration_ms":11000}
+
+event: scenario.stopped
+data: {"session_id":"019...","reason":"operator_request","injected_events":2}
+
+event: scenario.failed
+data: {"session_id":"019...","reason":"condition_timeout","step_index":1,"error":"expected workflow.step within 5000ms"}
+```
+
+Late subscribers receive the terminal event immediately if the session has already ended.
+
+### Scenario Session Lifecycle
+
+```
+REGISTERED ──► RUNNING ──► COMPLETED
+                      ├──► STOPPED  (operator request)
+                      └──► FAILED   (condition timeout)
+```
+
+### Synthetic Event Isolation
+
+Every synthetic event is published to the **SIMULATION** stream with metadata markers:
+
+| Metadata Key | Value | Description |
+|-------------|-------|-------------|
+| `simulation.synthetic` | `"true"` | Marks the event as synthetic |
+| `simulation.session_id` | UUID | Session that produced this event |
+| `simulation.scenario_name` | string | Scenario that produced this event |
+
+Synthetic events never appear on live streams. Each receives a new UUID v7 ID.
+
+### Bundled Example
+
+The wildfire example includes a pre-built scenario at `examples/wildfire/scenarios/wildfire-simulation.json`. See the [wildfire example README](https://github.com/baran-network/baran-os/tree/main/examples/wildfire) for instructions.
+
 ## Architecture Notes
 
 - **EventStore reads directly from JetStream** — it does not subscribe through the EventBus. This avoids coupling the query path to the routing path and provides efficient access to historical data using ordered consumers with `DeliverByStartTimePolicy`.

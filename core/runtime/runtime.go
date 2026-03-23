@@ -388,6 +388,12 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	replayEngine := simulation.NewReplayEngine(eventStore, bus, natsbus.JetStream(), r.nodeID)
 	replayHandler := NewReplayHandler(eventStore, replayEngine)
 	replayHandler.RegisterRoutes(r.httpMux)
+
+	// EventInjector + ScenarioEngine — synthetic event injection and scenario lifecycle.
+	injector := simulation.NewEventInjector(natsbus.JetStream(), bus, r.nodeID)
+	scenarioEngine := simulation.NewScenarioEngine(injector, natsbus.JetStream())
+	scenarioHandler := NewScenarioHandler(injector, scenarioEngine)
+	scenarioHandler.RegisterRoutes(r.httpMux)
 	log.Info("subsystem started", "component", "simulation")
 
 	return nil

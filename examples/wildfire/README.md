@@ -260,6 +260,87 @@ curl -s http://localhost:8080/api/replay/sessions/{session_id} | jq .
 
 > **Note**: Replayed events are fully isolated on the SIMULATION stream. Live agents never see them, and no workflow state is modified.
 
+## Running a Simulation Scenario
+
+Baran OS includes a scenario runner that can inject synthetic events into the SIMULATION stream. The wildfire example ships with a pre-built scenario file that simulates the full detection-to-evacuation workflow without requiring live agents.
+
+### 1. Start the runtime
+
+```bash
+cd /path/to/baran-os
+go build -o baran ./core/cmd/baran
+./baran -log-level debug
+```
+
+### 2. Register the bundled scenario
+
+```bash
+curl -s -X POST http://localhost:9090/api/simulation/scenarios \
+  -H "Content-Type: application/json" \
+  -d @examples/wildfire/scenarios/wildfire-simulation.json | jq .
+```
+
+Save the returned `scenario.id` for the next steps.
+
+### 3. Start the scenario
+
+```bash
+curl -s -X POST http://localhost:9090/api/simulation/scenarios/{scenario_id}/start | jq .
+```
+
+Save the returned `session.id`.
+
+### 4. Stream events in real time (SSE)
+
+In a separate terminal:
+
+```bash
+curl -N http://localhost:9090/api/simulation/sessions/{session_id}/stream
+```
+
+You'll see events arrive in sequence:
+
+```
+event: scenario.event
+data: {"event_id":"...","event_type":"workflow.start","step_index":0,...}
+
+event: scenario.event
+data: {"event_id":"...","event_type":"workflow.step","step_index":1,...}
+
+...
+
+event: scenario.complete
+data: {"session_id":"...","total_events":7,"duration_ms":12000}
+```
+
+### 5. Check session status
+
+```bash
+curl -s http://localhost:9090/api/simulation/sessions/{session_id} | jq .
+```
+
+### 6. Stop a running scenario (optional)
+
+```bash
+curl -s -X POST http://localhost:9090/api/simulation/sessions/{session_id}/stop | jq .
+```
+
+### What the scenario covers
+
+The bundled `wildfire-simulation.json` includes 7 steps with 6 distinct event types:
+
+| Step | Event Type | Source Agent | Delay |
+|------|-----------|-------------|-------|
+| 0 | `workflow.start` | sensor-001 | 0s |
+| 1 | `workflow.step` (risk) | risk-agent | 2s |
+| 2 | `workflow.step` (resources) | resource-agent | 2s |
+| 3 | `workflow.step` (evacuation) | evacuation-agent | 2s |
+| 4 | `human.decision.request` | evacuation-agent | 1s |
+| 5 | `human.decision.response` | incident-commander | 3s |
+| 6 | `workflow.complete` | coordinator | 2s |
+
+All events are injected into the SIMULATION stream with synthetic markers (`simulation.synthetic=true`) — they never interfere with live workflows.
+
 ## Troubleshooting
 
 | Problem | Solution |

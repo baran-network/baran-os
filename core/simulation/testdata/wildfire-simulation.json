@@ -1,0 +1,89 @@
+{
+  "name": "wildfire-sierra-nevada",
+  "description": "Simulates a complete wildfire emergency response workflow: detection, risk assessment, resource allocation, evacuation planning, and human decision approval",
+  "steps": [
+    {
+      "event_type": "workflow.start",
+      "delay_ms": 0,
+      "source_agent": "sensor-001",
+      "payload_json": {
+        "workflow_name": "wildfire-response",
+        "location": "Sierra Nevada - North Ridge",
+        "severity": "high"
+      },
+      "metadata": {
+        "zone": "north-ridge",
+        "trigger": "thermal-sensor"
+      }
+    },
+    {
+      "event_type": "workflow.step",
+      "delay_ms": 2000,
+      "source_agent": "risk-agent",
+      "payload_json": {
+        "step_name": "risk-assessment",
+        "risk_score": 0.85,
+        "threat_level": "severe",
+        "spread_rate_ha_hr": 30.0,
+        "affected_zones": ["Zone-A", "Zone-B", "Zone-C"]
+      }
+    },
+    {
+      "event_type": "workflow.step",
+      "delay_ms": 2000,
+      "source_agent": "resource-agent",
+      "payload_json": {
+        "step_name": "resource-allocation",
+        "fire_trucks": 12,
+        "crews": 8,
+        "aircraft": 3,
+        "staging_area": "Base Camp Alpha - Highway 395"
+      }
+    },
+    {
+      "event_type": "workflow.step",
+      "delay_ms": 2000,
+      "source_agent": "evacuation-agent",
+      "payload_json": {
+        "step_name": "evacuation-plan",
+        "zones": [
+          {"name": "Zone-A (Residential)", "priority": 1, "population": 1200, "route": "Highway 395 South"},
+          {"name": "Zone-B (Commercial)", "priority": 2, "population": 450, "route": "Interstate 80 West"},
+          {"name": "Zone-C (Rural)", "priority": 3, "population": 180, "route": "Forest Service Road 3"}
+        ],
+        "total_evacuees": 1830,
+        "shelters": ["Community Center - Reno", "High School Gym - Carson City", "Fairgrounds - Minden"]
+      }
+    },
+    {
+      "event_type": "human.decision.request",
+      "delay_ms": 1000,
+      "source_agent": "evacuation-agent",
+      "payload_json": {
+        "question": "Approve evacuation of zones A, B, and C?",
+        "options": ["approve", "deny", "escalate"],
+        "urgency": "high",
+        "context": "1830 residents in affected area, fire spreading at 30 ha/hr"
+      }
+    },
+    {
+      "event_type": "human.decision.response",
+      "delay_ms": 3000,
+      "source_agent": "incident-commander",
+      "payload_json": {
+        "decision": "approve",
+        "notes": "Evacuation approved for all three zones. Priority on Zone-A residential area."
+      }
+    },
+    {
+      "event_type": "workflow.complete",
+      "delay_ms": 2000,
+      "source_agent": "coordinator",
+      "payload_json": {
+        "result": "evacuation_approved",
+        "steps_completed": 6,
+        "total_duration_estimate_min": 45
+      }
+    }
+  ]
+}

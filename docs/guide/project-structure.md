@@ -15,10 +15,12 @@ baran-os/
 ├── protocol/                Protobuf definitions and generated code
 │   ├── proto/               Source .proto files
 │   └── gen/                 Generated Go code (do not edit)
+│   ├── simulation/          EventStore, ReplayEngine, ScenarioEngine, EventInjector
 ├── examples/
 │   └── wildfire/            End-to-end wildfire emergency example
 │       ├── agents/          Three agents: risk, resource, evacuation
 │       ├── trigger/         Workflow trigger program
+│       ├── scenarios/       Bundled simulation scenarios (wildfire-simulation.json)
 │       └── proto/           Domain-specific protobuf definitions
 ├── docs/                    GitHub Pages site (landing page + documentation)
 │   ├── index.html           Landing page (HTML + Tailwind CDN)
