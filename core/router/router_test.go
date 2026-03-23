@@ -12,6 +12,7 @@ import (
 	"github.com/baran-network/baran-os/core/registry"
 	"github.com/baran-network/baran-os/core/router"
 	"github.com/baran-network/baran-os/core/testutil"
+	"github.com/baran-network/baran-os/core/workflow"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
@@ -25,7 +26,9 @@ func setupRouter(t *testing.T) (*router.DefaultRouter, *registry.KVRegistry, eve
 	_, nc := testutil.StartNATS(t)
 	ctx := context.Background()
 
-	bus, err := natseventbus.NewFromConn(ctx, nc)
+	streams := router.DefaultStreamRegistry()
+
+	bus, err := natseventbus.NewFromConn(ctx, nc, streams)
 	if err != nil {
 		t.Fatalf("create bus: %v", err)
 	}
@@ -36,8 +39,8 @@ func setupRouter(t *testing.T) (*router.DefaultRouter, *registry.KVRegistry, eve
 		t.Fatalf("create registry: %v", err)
 	}
 
-	streams := router.DefaultStreamRegistry()
-	r := router.NewDefaultRouter(bus, reg, streams)
+	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
+	r := router.NewDefaultRouter(bus, reg, streams, streamMgr, nil)
 
 	return r, reg, bus
 }

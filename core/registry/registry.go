@@ -32,4 +32,12 @@ type AgentRegistry interface {
 	// IncrementMissedHeartbeats increments the missed counter and transitions
 	// at thresholds (3→UNHEALTHY, 6→DEAD).
 	IncrementMissedHeartbeats(ctx context.Context, agentID string, revision uint64) (AgentLifecycleStatus, uint64, error)
+
+	// RegisterRemote upserts a remote agent's capabilities into the local registry.
+	// The entry is stored under key "remote.{nodeID}.{agentID}" and marked as Origin="remote".
+	RegisterRemote(ctx context.Context, reg AgentRegistration) error
+
+	// DeregisterRemotesByNode removes all remote capability entries from a given node.
+	// Used when a node goes DEAD or gracefully unregisters.
+	DeregisterRemotesByNode(ctx context.Context, nodeID string) error
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/baran-network/baran-os/core/eventbus"
 	natseventbus "github.com/baran-network/baran-os/core/eventbus/nats"
 	"github.com/baran-network/baran-os/core/registry"
+	"github.com/baran-network/baran-os/core/router"
 	"github.com/baran-network/baran-os/core/testutil"
 	"github.com/baran-network/baran-os/core/workflow"
 	protocolv1 "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1"
@@ -29,7 +30,9 @@ func newTestSetup(t *testing.T, defaultTimeout time.Duration) *testSetup {
 	_, nc := testutil.StartNATS(t)
 	ctx := context.Background()
 
-	bus, err := natseventbus.NewFromConn(ctx, nc)
+	streams := router.DefaultStreamRegistry()
+
+	bus, err := natseventbus.NewFromConn(ctx, nc, streams)
 	if err != nil {
 		t.Fatalf("NewFromConn: %v", err)
 	}
@@ -45,7 +48,10 @@ func newTestSetup(t *testing.T, defaultTimeout time.Duration) *testSetup {
 		t.Fatalf("NewKVRegistry: %v", err)
 	}
 
-	engine := workflow.NewWorkflowEngine(bus, store, reg, "test-node", defaultTimeout)
+	streamMgr := workflow.NewWorkflowStreamManager(bus, streams)
+	rtr := router.NewDefaultRouter(bus, reg, streams, streamMgr, nil)
+
+	engine := workflow.NewWorkflowEngine(bus, store, reg, streamMgr, rtr, "test-node", defaultTimeout)
 	return &testSetup{bus: bus, store: store, reg: reg, engine: engine}
 }
 
@@ -117,14 +123,14 @@ func TestUS1_WorkflowStart(t *testing.T) {
 	// Subscribe to the agent's direct subject to capture workflow.step dispatch.
 	var stepWg sync.WaitGroup
 	stepWg.Add(1)
-	var capturedStep protocolv1.WorkflowStepPayload
+	var capturedStep *protocolv1.WorkflowStepPayload
 	var capturedOnce sync.Once
 
 	_, err := ts.bus.Subscribe(ctx, "agent.direct."+agentID+".>", func(_ context.Context, evt *eventbus.Event) error {
 		var step protocolv1.WorkflowStepPayload
 		if err := proto.Unmarshal(evt.Payload, &step); err == nil {
 			capturedOnce.Do(func() {
-				capturedStep = step
+				capturedStep = proto.Clone(&step).(*protocolv1.WorkflowStepPayload)
 				stepWg.Done()
 			})
 		}
@@ -174,14 +180,14 @@ func TestUS1_WorkflowStart_InvalidDefinition(t *testing.T) {
 
 	var errorWg sync.WaitGroup
 	errorWg.Add(1)
-	var capturedError protocolv1.AgentErrorPayload
+	var capturedError *protocolv1.AgentErrorPayload
 	var capturedOnce sync.Once
 
 	_, err := ts.bus.Subscribe(ctx, "agent.error", func(_ context.Context, evt *eventbus.Event) error {
 		var payload protocolv1.AgentErrorPayload
 		if err := proto.Unmarshal(evt.Payload, &payload); err == nil {
 			capturedOnce.Do(func() {
-				capturedError = payload
+				capturedError = proto.Clone(&payload).(*protocolv1.AgentErrorPayload)
 				errorWg.Done()
 			})
 		}
@@ -239,13 +245,16 @@ func TestUS5_WorkflowStateRequest(t *testing.T) {
 	// Now query the state.
 	var respWg sync.WaitGroup
 	respWg.Add(1)
-	var capturedResp protocolv1.WorkflowStateResponsePayload
+	var capturedResp *protocolv1.WorkflowStateResponsePayload
 	var respOnce sync.Once
 
 	_, err = ts.bus.Subscribe(ctx, "workflow.state.response", func(_ context.Context, evt *eventbus.Event) error {
 		var resp protocolv1.WorkflowStateResponsePayload
 		if err := proto.Unmarshal(evt.Payload, &resp); err == nil {
-			respOnce.Do(func() { capturedResp = resp; respWg.Done() })
+			respOnce.Do(func() {
+				capturedResp = proto.Clone(&resp).(*protocolv1.WorkflowStateResponsePayload)
+				respWg.Done()
+			})
 		}
 		return nil
 	})
@@ -288,13 +297,16 @@ func TestUS5_WorkflowStateRequest_NotFound(t *testing.T) {
 
 	var errWg sync.WaitGroup
 	errWg.Add(1)
-	var capturedErr protocolv1.AgentErrorPayload
+	var capturedErr *protocolv1.AgentErrorPayload
 	var once sync.Once
 
 	_, err := ts.bus.Subscribe(ctx, "agent.error", func(_ context.Context, evt *eventbus.Event) error {
 		var payload protocolv1.AgentErrorPayload
 		if err := proto.Unmarshal(evt.Payload, &payload); err == nil {
-			once.Do(func() { capturedErr = payload; errWg.Done() })
+			once.Do(func() {
+				capturedErr = proto.Clone(&payload).(*protocolv1.AgentErrorPayload)
+				errWg.Done()
+			})
 		}
 		return nil
 	})

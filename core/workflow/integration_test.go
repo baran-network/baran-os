@@ -32,7 +32,7 @@ func TestE2E_WildfireScenario(t *testing.T) {
 
 	// Track per-step dispatches.
 	type stepCapture struct {
-		payload protocolv1.WorkflowStepPayload
+		payload *protocolv1.WorkflowStepPayload
 		event   *eventbus.Event
 	}
 	stepCh := make(chan stepCapture, 10)
@@ -42,7 +42,7 @@ func TestE2E_WildfireScenario(t *testing.T) {
 		_, _ = ts.bus.Subscribe(ctx, "agent.direct."+aid+".>", func(_ context.Context, evt *eventbus.Event) error {
 			var step protocolv1.WorkflowStepPayload
 			if err := proto.Unmarshal(evt.Payload, &step); err == nil {
-				stepCh <- stepCapture{payload: step, event: evt}
+				stepCh <- stepCapture{payload: proto.Clone(&step).(*protocolv1.WorkflowStepPayload), event: evt}
 			}
 			return nil
 		})
@@ -51,7 +51,7 @@ func TestE2E_WildfireScenario(t *testing.T) {
 	// Subscribe to workflow.complete via a broad pattern.
 	var completeWg sync.WaitGroup
 	completeWg.Add(1)
-	var capturedComplete protocolv1.WorkflowCompletePayload
+	var capturedComplete *protocolv1.WorkflowCompletePayload
 	var completeOnce sync.Once
 	var completedWfID string
 
@@ -95,7 +95,7 @@ func TestE2E_WildfireScenario(t *testing.T) {
 		var cp protocolv1.WorkflowCompletePayload
 		if err := proto.Unmarshal(evt.Payload, &cp); err == nil {
 			completeOnce.Do(func() {
-				capturedComplete = cp
+				capturedComplete = proto.Clone(&cp).(*protocolv1.WorkflowCompletePayload)
 				completedWfID = cp.WorkflowId
 				completeWg.Done()
 			})
@@ -195,14 +195,17 @@ func TestE2E_WildfireScenario(t *testing.T) {
 	// Query state to validate US5 on completed workflow.
 	var respWg sync.WaitGroup
 	respWg.Add(1)
-	var stateResp protocolv1.WorkflowStateResponsePayload
+	var stateResp *protocolv1.WorkflowStateResponsePayload
 	var respOnce sync.Once
 
 	_, _ = ts.bus.Subscribe(ctx, "workflow.state.response", func(_ context.Context, evt *eventbus.Event) error {
 		var resp protocolv1.WorkflowStateResponsePayload
 		if err := proto.Unmarshal(evt.Payload, &resp); err == nil {
 			if resp.WorkflowId == wfID {
-				respOnce.Do(func() { stateResp = resp; respWg.Done() })
+				respOnce.Do(func() {
+					stateResp = proto.Clone(&resp).(*protocolv1.WorkflowStateResponsePayload)
+					respWg.Done()
+				})
 			}
 		}
 		return nil

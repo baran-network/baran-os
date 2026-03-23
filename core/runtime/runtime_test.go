@@ -35,18 +35,9 @@ func TestRuntimeStartStop(t *testing.T) {
 		errCh <- rt.Run(ctx)
 	}()
 
-	// Wait for runtime to be ready by polling NATS connection
-	var nc *nats.Conn
-	var err error
+	// Wait for runtime to be fully ready (all subsystems up).
 	deadline := time.After(10 * time.Second)
-	for {
-		natsURL := rt.NATSURL()
-		if natsURL != "" {
-			nc, err = nats.Connect(natsURL)
-			if err == nil {
-				break
-			}
-		}
+	for !rt.Ready() {
 		select {
 		case <-deadline:
 			t.Fatal("runtime did not become ready within 10s")
@@ -56,6 +47,11 @@ func TestRuntimeStartStop(t *testing.T) {
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
+
+	nc, err := nats.Connect(rt.NATSURL())
+	if err != nil {
+		t.Fatalf("connect to NATS: %v", err)
+	}
 	defer nc.Close()
 
 	// Verify we can create an eventbus via the runtime's NATS
@@ -63,7 +59,7 @@ func TestRuntimeStartStop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create eventbus: %v", err)
 	}
-	defer bus.Close()
+	defer func() { _ = bus.Close() }()
 
 	// Publish a test event on a mapped stream and verify it's routable
 	received := make(chan struct{}, 1)
@@ -74,7 +70,7 @@ func TestRuntimeStartStop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 
 	testEvent := &eventbus.Event{
 		ID:        "test-event-001",
@@ -151,7 +147,7 @@ func TestHealthEndpoint(t *testing.T) {
 			break
 		}
 		if resp != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -163,7 +159,7 @@ func TestHealthEndpoint(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
 		t.Fatalf("decode health response: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if health.Status != "healthy" {
 		t.Errorf("status = %q, want healthy", health.Status)

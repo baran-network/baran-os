@@ -32,6 +32,12 @@ type StreamCreator interface {
 	EnsureStream(ctx context.Context, name string, subjects []string) error
 }
 
+// EventPublisher is a narrow interface for publishing events through the router.
+// The workflow engine depends on this instead of importing the router package directly.
+type EventPublisher interface {
+	Route(ctx context.Context, event *Event) error
+}
+
 // EventBus is the transport abstraction for publishing and subscribing to events.
 // Implementations MUST NOT leak transport-specific types through this interface.
 type EventBus interface {
@@ -41,6 +47,11 @@ type EventBus interface {
 	// Subscribe registers a handler for events matching the given type pattern.
 	// Supports exact match ("agent.register") and wildcard ("agent.>").
 	Subscribe(ctx context.Context, eventType string, handler EventHandler) (Subscription, error)
+
+	// SubscribeWithStream creates a consumer on a specific named stream with the given
+	// filter subject. The stream is verified to exist before the consumer is created.
+	// Use this instead of Subscribe when the target stream is known (e.g., per-workflow streams).
+	SubscribeWithStream(ctx context.Context, streamName string, subject string, handler EventHandler) (Subscription, error)
 
 	// Close drains all subscriptions and releases resources.
 	Close() error

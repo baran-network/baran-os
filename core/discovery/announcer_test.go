@@ -2,7 +2,6 @@ package discovery_test
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -286,7 +285,7 @@ func TestAnnouncer_DeadAgentDeannounce(t *testing.T) {
 	errPayload := &protocolv1.AgentErrorPayload{
 		AgentId:   "dead-agent",
 		ErrorCode: "AGENT_DEAD",
-		Message:   fmt.Sprintf("agent dead-agent declared dead"),
+		Message:   "agent dead-agent declared dead",
 	}
 	data, _ := proto.Marshal(errPayload)
 

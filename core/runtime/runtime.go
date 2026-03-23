@@ -14,9 +14,11 @@ import (
 	"github.com/baran-network/baran-os/core/discovery"
 	"github.com/baran-network/baran-os/core/eventbus"
 	natseventbus "github.com/baran-network/baran-os/core/eventbus/nats"
+	"github.com/baran-network/baran-os/core/federation"
 	"github.com/baran-network/baran-os/core/health"
 	"github.com/baran-network/baran-os/core/registry"
 	"github.com/baran-network/baran-os/core/router"
+	"github.com/baran-network/baran-os/core/simulation"
 	"github.com/baran-network/baran-os/core/workflow"
 	"github.com/google/uuid"
 	natsserver "github.com/nats-io/nats-server/v2/server"
@@ -43,8 +45,11 @@ type Runtime struct {
 	discoveryH     *discovery.DiscoveryHandler
 	registryH      *registry.Handler
 
+	federation *federation.FederationGateway
+
 	subscriptions   []eventbus.Subscription
 	httpServer      *http.Server
+	httpMux         *http.ServeMux
 	healthAddr      string
 	startedAt       time.Time
 	subsystemStatus map[string]string
@@ -80,7 +85,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 		return fmt.Errorf("start subsystems: %w", err)
 	}
 
+	r.mu.Lock()
 	r.startedAt = time.Now()
+	r.mu.Unlock()
 
 	natsURL := r.natsServer.ClientURL()
 	log.Info("runtime ready", "node_id", r.nodeID, "nats_url", natsURL)
@@ -109,9 +116,21 @@ func (r *Runtime) NATSURL() string {
 	return s.ClientURL()
 }
 
+// Ready returns true if all subsystems have been started and the runtime
+// is accepting events. Use this instead of NATSURL to determine when
+// the runtime is fully operational.
+func (r *Runtime) Ready() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return !r.startedAt.IsZero()
+}
+
 func (r *Runtime) startHealthHTTP() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", r.healthHandler)
+
+	// Decision API routes will be registered after the coordinator is ready.
+	r.httpMux = mux
 
 	r.httpServer = &http.Server{
 		Addr:    fmt.Sprintf(":%d", r.config.HealthPort),
@@ -147,12 +166,25 @@ func (r *Runtime) startNATS(ctx context.Context) error {
 	log := r.logger.With("component", "nats")
 
 	opts := &natsserver.Options{
-		Host:         "127.0.0.1",
-		Port:         r.config.NATSPort,
-		JetStream:    true,
-		StoreDir:     r.config.NATSStoreDir,
-		NoSigs: true,
-		NoLog:  true, // we set a custom logger below
+		Host:      "127.0.0.1",
+		Port:      r.config.NATSPort,
+		JetStream: true,
+		StoreDir:  r.config.NATSStoreDir,
+		NoSigs:    true,
+		NoLog:     true, // we set a custom logger below
+	}
+
+	// Configure leaf node for federation if seeds are provided.
+	fedCfg := federation.GatewayConfig{
+		Seeds:    r.config.FederationSeeds,
+		LeafPort: r.config.FederationLeafPort,
+	}
+	if leafOpts := federation.LeafNodeServerOptions(fedCfg); leafOpts != nil {
+		opts.LeafNode = *leafOpts
+		log.Info("federation leaf node configured",
+			"leaf_port", fedCfg.LeafPort,
+			"seeds", fedCfg.Seeds,
+		)
 	}
 
 	s, err := natsserver.NewServer(opts)
@@ -187,12 +219,16 @@ func (r *Runtime) startNATS(ctx context.Context) error {
 func (r *Runtime) startSubsystems(ctx context.Context) error {
 	log := r.logger.With("component", "runtime")
 
-	// EventBus
-	bus, err := natseventbus.NewFromConn(ctx, r.natsConn)
+	// Stream Registry — shared across bus, router, and stream manager
+	streams := router.DefaultStreamRegistry()
+
+	// EventBus (keep concrete type to access JetStream handle for EventStore)
+	natsbus, err := natseventbus.NewFromConn(ctx, r.natsConn, streams)
 	if err != nil {
 		r.shutdown(ctx)
 		return fmt.Errorf("eventbus: %w", err)
 	}
+	bus := eventbus.EventBus(natsbus)
 	r.bus = bus
 	r.setSubsystemStatus("eventbus", "up")
 	log.Info("subsystem started", "component", "eventbus")
@@ -207,9 +243,11 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	r.setSubsystemStatus("registry", "up")
 	log.Info("subsystem started", "component", "registry")
 
-	// Event Router
-	streams := router.DefaultStreamRegistry()
-	rtr := router.NewDefaultRouter(r.bus, r.registry, streams)
+	// WorkflowStreamManager — uses the shared stream registry
+	streamMgr := workflow.NewWorkflowStreamManager(natsbus, streams)
+
+	// Event Router (relay injected later after federation gateway is ready)
+	rtr := router.NewDefaultRouter(r.bus, r.registry, streams, streamMgr, nil)
 	r.router = rtr
 	r.setSubsystemStatus("router", "up")
 	log.Info("subsystem started", "component", "router")
@@ -230,7 +268,7 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 		r.shutdown(ctx)
 		return fmt.Errorf("workflow state store: %w", err)
 	}
-	engine := workflow.NewWorkflowEngine(r.bus, store, r.registry, r.nodeID, r.config.WorkflowTimeout)
+	engine := workflow.NewWorkflowEngine(r.bus, store, r.registry, streamMgr, rtr, r.nodeID, r.config.WorkflowTimeout)
 	wfSubs, err := engine.Start(ctx)
 	if err != nil {
 		r.shutdown(ctx)
@@ -240,6 +278,23 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	r.subscriptions = append(r.subscriptions, wfSubs...)
 	r.setSubsystemStatus("workflow_engine", "up")
 	log.Info("subsystem started", "component", "workflow")
+
+	// Register decision API + UI routes now that the coordinator is available.
+	uiHandler := NewUIHandler(engine.Coordinator(), bus, r.nodeID, r.logger)
+	uiHandler.RegisterRoutes(r.httpMux)
+
+	// Subscribe to events for SSE broadcasting.
+	sseSubs, err := uiHandler.SubscribeEvents(ctx)
+	if err != nil {
+		r.shutdown(ctx)
+		return fmt.Errorf("ui handler events: %w", err)
+	}
+	r.subscriptions = append(r.subscriptions, sseSubs...)
+
+	// Recover pending human decisions from any previous runtime instance.
+	if err := engine.Coordinator().RecoverPending(ctx, store.ListAll); err != nil {
+		log.Warn("failed to recover pending decisions", "error", err)
+	}
 
 	// Health Monitor
 	healthCfg := health.Config{
@@ -280,6 +335,67 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	r.setSubsystemStatus("discovery", "up")
 	log.Info("subsystem started", "component", "discovery")
 
+	// Federation Gateway
+	fedCfg := federation.GatewayConfig{
+		Seeds:              r.config.FederationSeeds,
+		PSK:                r.config.FederationPSK,
+		HeartbeatInterval:  r.config.FederationHeartbeatInterval,
+		UnhealthyThreshold: r.config.FederationUnhealthyThreshold,
+		DeadThreshold:      r.config.FederationDeadThreshold,
+		RelayTimeout:       r.config.FederationRelayTimeout,
+		LeafPort:           r.config.FederationLeafPort,
+		CleanupTTL:         r.config.FederationCleanupTTL,
+	}
+
+	transport := federation.NewNATSLeafTransport()
+	if err := transport.Connect(ctx, r.natsConn); err != nil {
+		r.shutdown(ctx)
+		return fmt.Errorf("federation transport: %w", err)
+	}
+
+	nodeReg, err := federation.NewKVNodeRegistry(ctx, r.natsConn, fedCfg.UnhealthyThreshold, fedCfg.DeadThreshold)
+	if err != nil {
+		r.shutdown(ctx)
+		return fmt.Errorf("node registry: %w", err)
+	}
+
+	gw := federation.NewFederationGateway(
+		r.nodeID, fedCfg, r.bus, r.registry, nodeReg, transport, r.logger,
+	)
+	gw.SetLocalRouter(rtr)
+	gwSubs, err := gw.Start(ctx)
+	if err != nil {
+		r.shutdown(ctx)
+		return fmt.Errorf("federation gateway: %w", err)
+	}
+	r.federation = gw
+	r.subscriptions = append(r.subscriptions, gwSubs...)
+
+	// Inject the federation relay into the router now that the gateway is ready.
+	if gw.IsEnabled() {
+		rtr.SetRelay(gw.Relay())
+	}
+
+	// Register federation API endpoints.
+	fedHandler := NewFederationHandler(gw)
+	fedHandler.RegisterRoutes(r.httpMux)
+
+	r.setSubsystemStatus("federation", "up")
+	log.Info("subsystem started", "component", "federation", "enabled", gw.IsEnabled())
+
+	// EventStore + ReplayEngine — access JetStream directly via concrete NATS bus.
+	eventStore := simulation.NewJetStreamEventStore(natsbus.JetStream(), streams)
+	replayEngine := simulation.NewReplayEngine(eventStore, bus, natsbus.JetStream(), r.nodeID)
+	replayHandler := NewReplayHandler(eventStore, replayEngine)
+	replayHandler.RegisterRoutes(r.httpMux)
+
+	// EventInjector + ScenarioEngine — synthetic event injection and scenario lifecycle.
+	injector := simulation.NewEventInjector(natsbus.JetStream(), bus, r.nodeID)
+	scenarioEngine := simulation.NewScenarioEngine(injector, natsbus.JetStream())
+	scenarioHandler := NewScenarioHandler(injector, scenarioEngine)
+	scenarioHandler.RegisterRoutes(r.httpMux)
+	log.Info("subsystem started", "component", "simulation")
+
 	return nil
 }
 
@@ -299,6 +415,14 @@ func (r *Runtime) shutdown(ctx context.Context) {
 		_ = sub.Unsubscribe()
 	}
 	r.subscriptions = nil
+
+	// Federation gateway
+	if r.federation != nil {
+		log.Info("stopping subsystem", "component", "federation")
+		if err := r.federation.Stop(ctx); err != nil {
+			log.Error("federation gateway shutdown error", "component", "federation", "error", err)
+		}
+	}
 
 	// Health monitor
 	if r.healthMonitor != nil {

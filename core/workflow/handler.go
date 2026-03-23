@@ -32,10 +32,6 @@ func (e *WorkflowEngine) handleWorkflowStart(ctx context.Context, event *eventbu
 func (e *WorkflowEngine) handleWorkflowStepResult(ctx context.Context, event *eventbus.Event) error {
 	workflowID := event.WorkflowID
 	if workflowID == "" {
-		// Try to extract workflow ID from subject: workflow.{id}.workflow.step.result
-		workflowID = extractWorkflowIDFromSubject(event.Type)
-	}
-	if workflowID == "" {
 		return fmt.Errorf("missing workflow_id in step result event")
 	}
 
@@ -127,19 +123,14 @@ func (e *WorkflowEngine) publishError(ctx context.Context, event *eventbus.Event
 	})
 }
 
-// extractWorkflowIDFromSubject parses workflow.{id}.{rest} subjects.
-func extractWorkflowIDFromSubject(subject string) string {
-	const prefix = "workflow."
-	if len(subject) <= len(prefix) {
-		return ""
+// handleDecisionResponse processes a human.decision.response event.
+func (e *WorkflowEngine) handleDecisionResponse(ctx context.Context, event *eventbus.Event) error {
+	var payload protocolv1.HumanDecisionResponsePayload
+	if err := proto.Unmarshal(event.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal HumanDecisionResponsePayload: %w", err)
 	}
-	rest := subject[len(prefix):]
-	for i, c := range rest {
-		if c == '.' {
-			return rest[:i]
-		}
-	}
-	return ""
+
+	return e.coordinator.ProcessResponse(ctx, &payload)
 }
 
 // workflowDefinitionFromProto converts a proto WorkflowDefinition to the Go type.
@@ -155,7 +146,7 @@ func workflowDefinitionFromProto(pb *protocolv1.WorkflowDefinition) (WorkflowDef
 	}
 	steps := make([]StepDefinition, len(pb.Steps))
 	for i, s := range pb.Steps {
-		if s.Capability == "" {
+		if s.Capability == "" && !s.HumanApproval {
 			return WorkflowDefinition{}, fmt.Errorf("%w: step %d has empty capability", ErrInvalidDefinition, i)
 		}
 		steps[i] = StepDefinition{
@@ -163,6 +154,9 @@ func workflowDefinitionFromProto(pb *protocolv1.WorkflowDefinition) (WorkflowDef
 			Capability:     s.Capability,
 			TimeoutSeconds: s.TimeoutSeconds,
 			Input:          s.Input,
+			HumanApproval:  s.HumanApproval,
+			Prompt:         s.Prompt,
+			ResourceIDs:    s.ResourceIds,
 		}
 	}
 	return WorkflowDefinition{
@@ -190,6 +184,9 @@ func workflowStateResponseFromState(state WorkflowState) *protocolv1.WorkflowSta
 				Capability:     s.Capability,
 				TimeoutSeconds: s.TimeoutSeconds,
 				Input:          s.Input,
+				HumanApproval:  s.HumanApproval,
+				Prompt:         s.Prompt,
+				ResourceIds:    s.ResourceIDs,
 			}
 		}
 		resp.Definition = &protocolv1.WorkflowDefinition{

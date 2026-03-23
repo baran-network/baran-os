@@ -121,6 +121,226 @@ go test ./... -timeout 60s -v
 
 This runs the full workflow end-to-end in-process with an embedded NATS server — no manual setup required.
 
+## Multi-Node Federation Example
+
+With Baran OS federation, you can split agents across two runtime nodes and run the workflow transparently across them. This demonstrates cross-node capability sharing and event relay.
+
+### Setup: Node A (fire detection) + Node B (evacuation planning)
+
+**Terminal 1 — Start Node A (seed node, fire detection side):**
+
+```bash
+./baran \
+  --nats-port 4222 \
+  --health-port 8080 \
+  --federation-psk "wildfire-demo"
+```
+
+**Terminal 2 — Start Node B (joins federation, evacuation side):**
+
+```bash
+./baran \
+  --nats-port 4223 \
+  --health-port 8081 \
+  --federation-seeds "127.0.0.1:7422" \
+  --federation-psk "wildfire-demo"
+```
+
+Wait ~2 seconds and verify both nodes see each other:
+
+```bash
+curl http://localhost:8080/api/federation/nodes
+# Both nodes appear with status "ACTIVE"
+```
+
+**Terminal 3 — Risk agent (connects to Node A):**
+
+```bash
+NATS_URL=nats://localhost:4222 go run ./agents/risk
+```
+
+**Terminal 4 — Resource agent (connects to Node A):**
+
+```bash
+NATS_URL=nats://localhost:4222 go run ./agents/resource
+```
+
+**Terminal 5 — Evacuation agent (connects to Node B):**
+
+```bash
+NATS_URL=nats://localhost:4223 go run ./agents/evacuation
+```
+
+**Terminal 6 — Trigger (connects to Node A):**
+
+```bash
+NATS_URL=nats://localhost:4222 go run ./trigger
+```
+
+The workflow starts on Node A. Steps 0 and 1 run on local agents (risk + resource). Step 2 requires `evacuation.plan`, which only exists on Node B — the router relays the step transparently and the result flows back to Node A to complete the workflow.
+
+> **Note**: The agents in this example read `NATS_URL` from the environment. If your agents don't yet support this, connect them directly to the NATS server address for their target node.
+
+### What federation adds
+
+- **Capability discovery**: Node A's workflow engine sees the evacuation capability registered on Node B
+- **Transparent relay**: When step 2 dispatches, the router detects the agent is remote and relays the event via NATS leaf node connection to Node B
+- **Result routing**: The step result published on Node B is relayed back to Node A's workflow stream, completing the step
+- **Health monitoring**: If Node B goes down, Node A marks it UNHEALTHY (3 missed heartbeats) then DEAD (6 missed heartbeats), and purges its capabilities
+
+## Replaying a Workflow
+
+After completing the wildfire workflow, you can replay it to review the event sequence step by step. This uses the EventStore and ReplayEngine introduced in v0.3.0.
+
+### 1. Find the workflow ID
+
+The trigger prints the workflow ID after completion (e.g., `Workflow ID: 01961234-...`). You can also query recent events:
+
+```bash
+# Get all workflow.complete events from the last hour
+curl -s "http://localhost:8080/api/events?start=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)&type=workflow.complete" | jq '.events[].event.workflow_id'
+```
+
+### 2. Query the workflow's events
+
+```bash
+# Get all events for the workflow
+curl -s "http://localhost:8080/api/events/workflows/{workflow_id}" | jq '.total'
+# Should show ~10+ events (start, steps, step results, complete)
+```
+
+### 3. Create a replay session
+
+```bash
+# Max speed replay (speed=0, default)
+curl -s -X POST http://localhost:8080/api/replay/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "YOUR_WORKFLOW_ID"}' | jq .
+```
+
+The session starts immediately and replays all events to the SIMULATION stream.
+
+### 4. Stream replay events in real time
+
+Open a second terminal to watch events via SSE:
+
+```bash
+curl -N http://localhost:8080/api/replay/sessions/{session_id}/stream
+```
+
+You'll see events like:
+
+```
+event: replay.event
+data: {"event":{...},"stream":"WF-...","sequence":1,"position":1,"total":12}
+
+event: replay.complete
+data: {"session_id":"...","total_replayed":12}
+```
+
+### 5. Real-time replay
+
+To replay with original timing (useful for watching the workflow unfold as it originally happened):
+
+```bash
+curl -s -X POST http://localhost:8080/api/replay/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "YOUR_WORKFLOW_ID", "speed": 1.0}'
+```
+
+### 6. Check session status
+
+```bash
+# List all sessions
+curl -s http://localhost:8080/api/replay/sessions | jq '.sessions[] | {id, state, replayed_events, total_events}'
+
+# Get a specific session
+curl -s http://localhost:8080/api/replay/sessions/{session_id} | jq .
+```
+
+> **Note**: Replayed events are fully isolated on the SIMULATION stream. Live agents never see them, and no workflow state is modified.
+
+## Running a Simulation Scenario
+
+Baran OS includes a scenario runner that can inject synthetic events into the SIMULATION stream. The wildfire example ships with a pre-built scenario file that simulates the full detection-to-evacuation workflow without requiring live agents.
+
+### 1. Start the runtime
+
+```bash
+cd /path/to/baran-os
+go build -o baran ./core/cmd/baran
+./baran -log-level debug
+```
+
+### 2. Register the bundled scenario
+
+```bash
+curl -s -X POST http://localhost:9090/api/simulation/scenarios \
+  -H "Content-Type: application/json" \
+  -d @examples/wildfire/scenarios/wildfire-simulation.json | jq .
+```
+
+Save the returned `scenario.id` for the next steps.
+
+### 3. Start the scenario
+
+```bash
+curl -s -X POST http://localhost:9090/api/simulation/scenarios/{scenario_id}/start | jq .
+```
+
+Save the returned `session.id`.
+
+### 4. Stream events in real time (SSE)
+
+In a separate terminal:
+
+```bash
+curl -N http://localhost:9090/api/simulation/sessions/{session_id}/stream
+```
+
+You'll see events arrive in sequence:
+
+```
+event: scenario.event
+data: {"event_id":"...","event_type":"workflow.start","step_index":0,...}
+
+event: scenario.event
+data: {"event_id":"...","event_type":"workflow.step","step_index":1,...}
+
+...
+
+event: scenario.complete
+data: {"session_id":"...","total_events":7,"duration_ms":12000}
+```
+
+### 5. Check session status
+
+```bash
+curl -s http://localhost:9090/api/simulation/sessions/{session_id} | jq .
+```
+
+### 6. Stop a running scenario (optional)
+
+```bash
+curl -s -X POST http://localhost:9090/api/simulation/sessions/{session_id}/stop | jq .
+```
+
+### What the scenario covers
+
+The bundled `wildfire-simulation.json` includes 7 steps with 6 distinct event types:
+
+| Step | Event Type | Source Agent | Delay |
+|------|-----------|-------------|-------|
+| 0 | `workflow.start` | sensor-001 | 0s |
+| 1 | `workflow.step` (risk) | risk-agent | 2s |
+| 2 | `workflow.step` (resources) | resource-agent | 2s |
+| 3 | `workflow.step` (evacuation) | evacuation-agent | 2s |
+| 4 | `human.decision.request` | evacuation-agent | 1s |
+| 5 | `human.decision.response` | incident-commander | 3s |
+| 6 | `workflow.complete` | coordinator | 2s |
+
+All events are injected into the SIMULATION stream with synthetic markers (`simulation.synthetic=true`) — they never interfere with live workflows.
+
 ## Troubleshooting
 
 | Problem | Solution |
@@ -130,3 +350,4 @@ This runs the full workflow end-to-end in-process with an embedded NATS server �
 | `workflow timeout` | Check agent logs for errors; increase step timeout if needed |
 | `connection refused` | Verify the runtime is running and NATS is accessible |
 | `module not found` | Run from within the `examples/wildfire/` directory |
+| Federation: `no remote capabilities` | Wait 2-3s for capability sync, then check `/api/federation/nodes` |

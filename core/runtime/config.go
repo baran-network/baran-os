@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,16 @@ type Config struct {
 	LogLevel           string
 	HealthPort         int
 	ShutdownGrace      time.Duration
+
+	// Federation settings
+	FederationSeeds              []string
+	FederationPSK                string
+	FederationHeartbeatInterval  time.Duration
+	FederationUnhealthyThreshold int32
+	FederationDeadThreshold      int32
+	FederationRelayTimeout       time.Duration
+	FederationLeafPort           int
+	FederationCleanupTTL         time.Duration
 }
 
 // DefaultConfig returns a Config with all default values.
@@ -34,6 +45,15 @@ func DefaultConfig() Config {
 		LogLevel:           "info",
 		HealthPort:         8080,
 		ShutdownGrace:      15 * time.Second,
+
+		FederationSeeds:              nil,
+		FederationPSK:                "",
+		FederationHeartbeatInterval:  10 * time.Second,
+		FederationUnhealthyThreshold: 3,
+		FederationDeadThreshold:      6,
+		FederationRelayTimeout:       30 * time.Second,
+		FederationLeafPort:           7422,
+		FederationCleanupTTL:         5 * time.Minute,
 	}
 }
 
@@ -65,6 +85,13 @@ func (c Config) Validate() error {
 	if c.ShutdownGrace <= 0 {
 		return fmt.Errorf("shutdown-grace must be positive, got %s", c.ShutdownGrace)
 	}
+	// Federation validation
+	if len(c.FederationSeeds) > 0 && c.FederationPSK == "" {
+		return fmt.Errorf("federation-psk is required when federation-seeds is set")
+	}
+	if c.FederationLeafPort < 1 || c.FederationLeafPort > 65535 {
+		return fmt.Errorf("federation-leaf-port must be between 1 and 65535, got %d", c.FederationLeafPort)
+	}
 	return nil
 }
 
@@ -80,6 +107,16 @@ type FlagValues struct {
 	LogLevel           string
 	HealthPort         int
 	ShutdownGrace      time.Duration
+
+	// Federation
+	FederationSeeds              string // comma-separated
+	FederationPSK                string
+	FederationHeartbeatInterval  time.Duration
+	FederationUnhealthyThreshold int32
+	FederationDeadThreshold      int32
+	FederationRelayTimeout       time.Duration
+	FederationLeafPort           int
+	FederationCleanupTTL         time.Duration
 }
 
 // ConfigFromFlags builds a Config by applying precedence: flag > env > default.
@@ -99,12 +136,39 @@ func ConfigFromFlags(fs *flag.FlagSet, fv FlagValues) (Config, error) {
 		LogLevel:           resolveString(fs, "log-level", fv.LogLevel, "BARAN_LOG_LEVEL", defaults.LogLevel),
 		HealthPort:         resolveInt(fs, "health-port", fv.HealthPort, "BARAN_HEALTH_PORT", defaults.HealthPort),
 		ShutdownGrace:      resolveDuration(fs, "shutdown-grace", fv.ShutdownGrace, "BARAN_SHUTDOWN_GRACE", defaults.ShutdownGrace),
+
+		FederationPSK:                resolveString(fs, "federation-psk", fv.FederationPSK, "BARAN_FEDERATION_PSK", defaults.FederationPSK),
+		FederationHeartbeatInterval:  resolveDuration(fs, "federation-heartbeat", fv.FederationHeartbeatInterval, "BARAN_FEDERATION_HEARTBEAT", defaults.FederationHeartbeatInterval),
+		FederationUnhealthyThreshold: resolveInt32(fs, "federation-unhealthy", fv.FederationUnhealthyThreshold, "BARAN_FEDERATION_UNHEALTHY", defaults.FederationUnhealthyThreshold),
+		FederationDeadThreshold:      resolveInt32(fs, "federation-dead", fv.FederationDeadThreshold, "BARAN_FEDERATION_DEAD", defaults.FederationDeadThreshold),
+		FederationRelayTimeout:       resolveDuration(fs, "federation-relay-timeout", fv.FederationRelayTimeout, "BARAN_FEDERATION_RELAY_TIMEOUT", defaults.FederationRelayTimeout),
+		FederationLeafPort:           resolveInt(fs, "federation-leaf-port", fv.FederationLeafPort, "BARAN_FEDERATION_LEAF_PORT", defaults.FederationLeafPort),
+		FederationCleanupTTL:         resolveDuration(fs, "federation-cleanup-ttl", fv.FederationCleanupTTL, "BARAN_FEDERATION_CLEANUP_TTL", defaults.FederationCleanupTTL),
+	}
+
+	// Parse federation seeds (comma-separated string → slice)
+	seedsStr := resolveString(fs, "federation-seeds", fv.FederationSeeds, "BARAN_FEDERATION_SEEDS", "")
+	if seedsStr != "" {
+		cfg.FederationSeeds = parseSeedsList(seedsStr)
 	}
 
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// parseSeedsList splits a comma-separated seeds string into a slice, trimming whitespace.
+func parseSeedsList(s string) []string {
+	parts := strings.Split(s, ",")
+	var seeds []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			seeds = append(seeds, p)
+		}
+	}
+	return seeds
 }
 
 // flagWasSet returns true if the named flag was explicitly provided on the command line.

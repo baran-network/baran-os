@@ -205,15 +205,15 @@ func TestFindByCapabilityNameMatch(t *testing.T) {
 	ctx := context.Background()
 
 	// Register agents with different capabilities.
-	reg.Register(ctx, registry.AgentRegistration{
+	_, _ = reg.Register(ctx, registry.AgentRegistration{
 		AgentID: "agent-A", AgentType: "t", Version: "1.0.0",
 		Capabilities: []registry.Capability{{Name: "risk-estimation", Version: "1.0.0"}},
 	})
-	reg.Register(ctx, registry.AgentRegistration{
+	_, _ = reg.Register(ctx, registry.AgentRegistration{
 		AgentID: "agent-B", AgentType: "t", Version: "1.0.0",
 		Capabilities: []registry.Capability{{Name: "risk-estimation", Version: "1.2.0"}},
 	})
-	reg.Register(ctx, registry.AgentRegistration{
+	_, _ = reg.Register(ctx, registry.AgentRegistration{
 		AgentID: "agent-C", AgentType: "t", Version: "1.0.0",
 		Capabilities: []registry.Capability{{Name: "evacuation", Version: "1.0.0"}},
 	})
@@ -234,11 +234,11 @@ func TestFindByCapabilityVersionConstraint(t *testing.T) {
 	reg := newTestRegistry(t)
 	ctx := context.Background()
 
-	reg.Register(ctx, registry.AgentRegistration{
+	_, _ = reg.Register(ctx, registry.AgentRegistration{
 		AgentID: "agent-v1", AgentType: "t", Version: "1.0.0",
 		Capabilities: []registry.Capability{{Name: "risk-estimation", Version: "1.0.0"}},
 	})
-	reg.Register(ctx, registry.AgentRegistration{
+	_, _ = reg.Register(ctx, registry.AgentRegistration{
 		AgentID: "agent-v2", AgentType: "t", Version: "1.0.0",
 		Capabilities: []registry.Capability{{Name: "risk-estimation", Version: "2.0.0"}},
 	})
@@ -263,9 +263,9 @@ func TestFindByCapabilityActiveOnly(t *testing.T) {
 		AgentID: "agent-unhealthy", AgentType: "t", Version: "1.0.0",
 		Capabilities: []registry.Capability{{Name: "detect", Version: "1.0.0"}},
 	})
-	reg.UpdateStatus(ctx, "agent-unhealthy", registry.StatusUnhealthy, rev)
+	_, _ = reg.UpdateStatus(ctx, "agent-unhealthy", registry.StatusUnhealthy, rev)
 
-	reg.Register(ctx, registry.AgentRegistration{
+	_, _ = reg.Register(ctx, registry.AgentRegistration{
 		AgentID: "agent-active", AgentType: "t", Version: "1.0.0",
 		Capabilities: []registry.Capability{{Name: "detect", Version: "1.0.0"}},
 	})
@@ -286,7 +286,7 @@ func TestFindByCapabilityEmptyResult(t *testing.T) {
 	reg := newTestRegistry(t)
 	ctx := context.Background()
 
-	reg.Register(ctx, registry.AgentRegistration{
+	_, _ = reg.Register(ctx, registry.AgentRegistration{
 		AgentID: "agent-x", AgentType: "t", Version: "1.0.0",
 		Capabilities: []registry.Capability{{Name: "unrelated", Version: "1.0.0"}},
 	})

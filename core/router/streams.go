@@ -2,6 +2,7 @@ package router
 
 import (
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -14,13 +15,19 @@ type StreamConfig struct {
 
 // StreamRegistry maps event types to their target streams.
 // It is the single source of truth for stream-to-event-type mapping.
+// Static streams are immutable; dynamic streams can be registered/unregistered at runtime.
 type StreamRegistry struct {
 	streams []StreamConfig
+	dynamic map[string]StreamConfig
+	mu      sync.RWMutex
 }
 
 // NewStreamRegistry creates a StreamRegistry with the given stream configurations.
 func NewStreamRegistry(configs ...StreamConfig) *StreamRegistry {
-	return &StreamRegistry{streams: configs}
+	return &StreamRegistry{
+		streams: configs,
+		dynamic: make(map[string]StreamConfig),
+	}
 }
 
 // DefaultStreamRegistry returns a StreamRegistry with the system default streams.
@@ -55,11 +62,46 @@ func DefaultStreamRegistry() *StreamRegistry {
 			Subjects: []string{"agent.capability.announce", "agent.discovery.request", "agent.discovery.response"},
 			MaxAge:   24 * time.Hour,
 		},
+		StreamConfig{
+			Name:     "HUMAN",
+			Subjects: []string{"human.decision.request", "human.decision.response"},
+			MaxAge:   24 * time.Hour,
+		},
+		StreamConfig{
+			Name:     "COORDINATION",
+			Subjects: []string{"decision.conflict", "decision.resolved"},
+			MaxAge:   24 * time.Hour,
+		},
+		StreamConfig{
+			Name:     "FEDERATION",
+			Subjects: []string{"federation.>"},
+			MaxAge:   24 * time.Hour,
+		},
+		StreamConfig{
+			Name:     "SIMULATION",
+			Subjects: []string{"simulation.>"},
+			MaxAge:   24 * time.Hour,
+		},
 	)
+}
+
+// RegisterDynamic adds a dynamic stream entry (e.g., per-workflow streams).
+func (r *StreamRegistry) RegisterDynamic(name string, subjects []string) {
+	r.mu.Lock()
+	r.dynamic[name] = StreamConfig{Name: name, Subjects: subjects}
+	r.mu.Unlock()
+}
+
+// UnregisterDynamic removes a dynamic stream entry.
+func (r *StreamRegistry) UnregisterDynamic(name string) {
+	r.mu.Lock()
+	delete(r.dynamic, name)
+	r.mu.Unlock()
 }
 
 // StreamForEventType returns the stream name for a given event type by matching
 // against configured subjects. Supports exact match, ">" suffix, and "*" token wildcards.
+// Checks static streams first, then dynamic entries.
 func (r *StreamRegistry) StreamForEventType(eventType string) (string, bool) {
 	for _, cfg := range r.streams {
 		for _, subj := range cfg.Subjects {
@@ -68,6 +110,17 @@ func (r *StreamRegistry) StreamForEventType(eventType string) (string, bool) {
 			}
 		}
 	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, cfg := range r.dynamic {
+		for _, subj := range cfg.Subjects {
+			if matchSubject(subj, eventType) {
+				return cfg.Name, true
+			}
+		}
+	}
+
 	return "", false
 }
 
