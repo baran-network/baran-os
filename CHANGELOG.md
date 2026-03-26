@@ -5,6 +5,57 @@ All notable changes to Baran OS will be documented in this file.
 This project uses [Semantic Versioning](https://semver.org/) with per-module Go tags
 (`protocol/v0.1.0`, `core/v0.1.0`, `sdk/v0.1.0`).
 
+## [v0.5.0] — 2026-03-25
+
+### Sidecar Gateway (`sidecar/`)
+
+- **Sidecar Gateway**: REST/SSE/WebSocket API that enables agents in any language to
+  participate in the Baran OS network. The sidecar wraps the Go SDK internally,
+  translating between HTTP/JSON and NATS/protobuf — external agents need zero
+  knowledge of NATS or protobuf.
+- **Agent Registration**: External agents register via `POST /agents` with capabilities,
+  labels, and optional callback URL. The sidecar creates a full SDK Agent instance,
+  proxies health pings, and advertises capabilities. `DELETE /agents/{id}` for clean
+  deregistration. Duplicate detection (409) and max agent limit (503).
+- **Event Publishing**: `POST /agents/{id}/events` accepts JSON payloads, validates
+  event types against the PayloadRegistry, translates to protobuf, and routes through
+  the event router. Supports `target_agent` for direct routing and `route.capability`
+  for capability dispatch.
+- **SSE Event Streaming**: `GET /agents/{id}/events` opens an SSE stream with real-time
+  event delivery (protobuf→JSON translation), 15s keepalive, `Last-Event-ID`
+  reconnection support, and explicit acknowledgment via `POST /agents/{id}/ack`.
+- **WebSocket Streaming**: `GET /agents/{id}/ws` provides full-duplex communication —
+  receive events and publish responses on a single connection. Supports ping/pong
+  keepalive, custom close codes (4001, 4004, 4008), and reconnection via
+  `last_event_id` query parameter.
+- **PSK Authentication**: Bearer token and query parameter authentication on all
+  endpoints (except `/health`). Pre-shared key configured via `--psk` flag or
+  `BARAN_SIDECAR_PSK` environment variable.
+- **PayloadRegistry**: Maps all 25+ event types to their protobuf message constructors
+  for automatic JSON↔protobuf translation using `protojson`.
+- **Configuration**: Flag > env > default precedence for port, NATS URL, PSK, log level,
+  and max agents.
+
+### SDKs (`sdks/`)
+
+- **Python SDK** (`baran-sdk`): High-level async agent API for Python 3.10+.
+  `BaranAgent` class with `@agent.on()` decorator for event handlers, automatic
+  registration/deregistration, SSE streaming, event acknowledgment, and context manager
+  support. Dependencies: `httpx` + `httpx-sse` only.
+- **TypeScript SDK** (`@baran/sdk`): Idiomatic async/await agent API for TypeScript 5.0+.
+  `BaranAgent` class with typed events, `.on()` event handlers, automatic lifecycle
+  management, and SSE streaming via `eventsource`. Zero NATS/protobuf dependency.
+
+### Documentation
+
+- New [Sidecar Gateway guide](docs/guide/sidecar-gateway.md) covering REST API, SSE,
+  WebSocket, Python SDK, TypeScript SDK, and configuration reference
+- Updated README with sidecar gateway section, SDK availability table, and updated
+  project structure
+- Updated sidebar navigation with Sidecar Gateway entry
+
+---
+
 ## [v0.4.0] — 2026-03-22
 
 ### Core (`core/`)

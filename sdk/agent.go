@@ -77,18 +77,26 @@ type Agent struct {
 // New creates a new Agent with the given name, type, version, and options.
 // It generates a UUID v7 agent ID automatically.
 func New(name, agentType, version string, opts ...Option) (*Agent, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return nil, fmt.Errorf("generate agent ID: %w", err)
+	}
+	return NewWithID(id.String(), name, agentType, version, opts...)
+}
+
+// NewWithID creates a new Agent with an explicit agent ID.
+// Use this when the caller needs to control the agent's identity (e.g. sidecar gateway).
+func NewWithID(agentID, name, agentType, version string, opts ...Option) (*Agent, error) {
 	if name == "" {
 		return nil, errors.New("agent name must not be empty")
+	}
+	if agentID == "" {
+		return nil, errors.New("agent ID must not be empty")
 	}
 
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(&o)
-	}
-
-	id, err := uuid.NewV7()
-	if err != nil {
-		return nil, fmt.Errorf("generate agent ID: %w", err)
 	}
 
 	logger := o.logger
@@ -97,14 +105,14 @@ func New(name, agentType, version string, opts ...Option) (*Agent, error) {
 	}
 
 	return &Agent{
-		id:           id.String(),
+		id:           agentID,
 		name:         name,
 		agentType:    agentType,
 		version:      version,
 		opts:         o,
 		state:        AgentStateCreated,
 		capabilities: make(map[string]capabilityEntry),
-		logger:       logger.With("agent_id", id.String(), "agent_name", name),
+		logger:       logger.With("agent_id", agentID, "agent_name", name),
 		cache:        newIdempotencyCache(o.idempotencyCacheSize),
 	}, nil
 }
