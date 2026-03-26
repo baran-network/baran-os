@@ -4,7 +4,7 @@
 
 Named after [Paul Baran](https://en.wikipedia.org/wiki/Paul_Baran), pioneer of distributed networks, Baran OS is an event-driven runtime where autonomous agents — AI-powered or not — discover each other, collaborate through typed events, and execute multi-step workflows without ever communicating directly.
 
-[![Version](https://img.shields.io/badge/version-v0.4.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.5.0-blue)](CHANGELOG.md)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![NATS](https://img.shields.io/badge/NATS-JetStream-27AAE1?logo=nats.io&logoColor=white)](https://nats.io)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -146,15 +146,33 @@ func main() {
 
 The SDK handles connection, registration, capability announcement, health pings, step dispatch, idempotency, and graceful shutdown.
 
+### Sidecar Gateway — Any Language
+
+Agents written in any language can join the network via the **Sidecar Gateway**, which translates between HTTP/JSON and the native NATS/protobuf protocol:
+
+```bash
+# Start the sidecar
+baran-sidecar --nats-url nats://localhost:4222 --psk my-secret-key
+
+# Register an agent via HTTP
+curl -X POST http://localhost:9090/agents \
+  -H "Authorization: Bearer my-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-agent", "agent_type": "analyzer", "version": "1.0.0",
+       "capabilities": [{"name": "echo.text", "version": "1.0.0"}]}'
+```
+
+External agents use REST for publishing, SSE or WebSocket for receiving events. See the [Sidecar Gateway guide](https://baran-network.github.io/baran-os/#/guide/sidecar-gateway) for details.
+
 ### SDKs
 
-| Language   | Status      |
-|------------|-------------|
-| Go         | Available   |
-| Python     | Planned     |
-| TypeScript | Planned     |
+| Language   | Package | Status |
+|------------|---------|--------|
+| Go         | `sdk/`  | Available (native) |
+| Python     | `baran-sdk` (pip) | Available |
+| TypeScript | `@baran/sdk` (npm) | Available |
 
-The protocol is protobuf over NATS — any language with a NATS client and protobuf support can implement an SDK.
+The Go SDK connects directly to NATS. Python and TypeScript SDKs connect via the Sidecar Gateway (HTTP/SSE) — no NATS or protobuf dependency required.
 
 ## Project Structure
 
@@ -171,7 +189,12 @@ baran-os/
 │   ├── runtime/        Runtime wiring, operator UI (embedded web assets)
 │   ├── health/         Health monitoring
 │   └── registry/       Agent and capability registry (KV-backed)
+├── sidecar/            Sidecar Gateway (REST/SSE/WebSocket → NATS/protobuf)
+│   └── cmd/baran-sidecar/  Sidecar binary entrypoint
 ├── sdk/                Go SDK for building agents
+├── sdks/               External language SDKs
+│   ├── python/         Python SDK (baran-sdk)
+│   └── typescript/     TypeScript SDK (@baran/sdk)
 ├── protocol/           Protobuf definitions and generated code
 ├── examples/wildfire/  End-to-end wildfire emergency example (single + multi-node)
 └── Makefile            Build, test, lint, dev targets
@@ -179,7 +202,7 @@ baran-os/
 
 ## Status
 
-Baran OS **v0.4.0** adds scenario runner and synthetic event injection to the simulation subsystem.
+Baran OS **v0.5.0** adds the Sidecar Gateway for multi-language agent support, plus Python and TypeScript SDKs.
 See the full [changelog](CHANGELOG.md) and the [documentation site](https://baran-network.github.io/baran-os/).
 
 **What works today:**
@@ -191,13 +214,19 @@ See the full [changelog](CHANGELOG.md) and the [documentation site](https://bara
 - **Multi-node federation** — node discovery, capability sharing, cross-node event relay, health monitoring, automatic dead-node cleanup
 - **Event replay & simulation** — query historical events, replay completed workflows on an isolated SIMULATION stream, real-time SSE streaming
 - **Scenario runner** — define and execute simulation scenarios with scripted event sequences, per-step delays, conditions, full REST API, and SSE streaming
+- **Sidecar Gateway** — REST/SSE/WebSocket API for external agents in any language, JSON↔protobuf translation, PSK authentication
+- **Python SDK** (`baran-sdk`) — async agent with decorator-based event handlers, SSE streaming, automatic lifecycle
+- **TypeScript SDK** (`@baran/sdk`) — typed events, async/await handlers, SSE streaming
 - Single-binary runtime with embedded NATS
 - Go SDK for building agents
 - End-to-end wildfire example (single-node, multi-node federation, and simulation scenarios)
-- Documentation site with quickstart, SDK reference, event catalog, federation guide, and simulation guide
+- Documentation site with quickstart, SDK reference, event catalog, federation guide, sidecar gateway guide, and simulation guide
 
 **What's coming:**
-- Python and TypeScript SDKs
+- Capability taxonomy and A2A (Agent-to-Agent) gateway for cross-platform interoperability
+- LLM agent example — autonomous coding workflow with LangGraph integration
+- Operator UI — network dashboard, federation view, and visual simulator
+- Distribution — goreleaser binaries, container images, and SDK packages
 
 ## Development
 

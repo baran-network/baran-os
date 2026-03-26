@@ -61,5 +61,7 @@ nats-data/
 baran-data/
 
 # Built binaries
-baran
+/baran
+core/baran
+sidecar/baran-sidecar
 trigger
