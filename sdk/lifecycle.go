@@ -21,6 +21,10 @@ func (a *Agent) register(ctx context.Context) error {
 			Version:     entry.cap.Version,
 			Description: entry.cap.Description,
 			Parameters:  entry.cap.Parameters,
+			Category:    entry.cap.Category,
+			Action:      entry.cap.Action,
+			InputTypes:  entry.cap.InputTypes,
+			OutputTypes: entry.cap.OutputTypes,
 		}
 		caps = append(caps, pb)
 	}
