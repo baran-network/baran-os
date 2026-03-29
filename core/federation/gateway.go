@@ -66,9 +66,10 @@ type FederationGateway struct {
 	nodeRegistry  NodeRegistry
 	transport     Transport
 
-	monitor *NodeMonitor
-	capSync *CapabilitySync
-	relay   *EventRelayImpl
+	monitor    *NodeMonitor
+	capSync    *CapabilitySync
+	aliasSync  *AliasSync
+	relay      *EventRelayImpl
 
 	localRouter eventbus.EventPublisher
 
@@ -101,6 +102,12 @@ func NewFederationGateway(
 		nodeRegistry:  nodeRegistry,
 		transport:     transport,
 	}
+}
+
+// SetAliasRegistry injects an alias registry for federation alias synchronization.
+// When set, the gateway will exchange alias snapshots alongside capabilities during handshake.
+func (g *FederationGateway) SetAliasRegistry(ar registry.AliasRegistry) {
+	g.aliasSync = NewAliasSync(g.nodeID, ar, g.transport, g.logger)
 }
 
 // SetLocalRouter injects the local event router for dispatching incoming relay events.
@@ -172,6 +179,15 @@ func (g *FederationGateway) Start(ctx context.Context) ([]eventbus.Subscription,
 	}
 	g.transportSubs = append(g.transportSubs, capTransportSubs...)
 
+	// AliasSync — exchange alias registry with peers when configured.
+	if g.aliasSync != nil {
+		aliasSubs, aliasErr := g.aliasSync.Start(ctx)
+		if aliasErr != nil {
+			return nil, fmt.Errorf("start alias sync: %w", aliasErr)
+		}
+		g.transportSubs = append(g.transportSubs, aliasSubs...)
+	}
+
 	// EventRelay — cross-node event forwarding.
 	g.relay = NewEventRelay(g.nodeID, g.agentRegistry, g.transport, g.config.RelayTimeout, g.logger)
 
@@ -219,6 +235,11 @@ func (g *FederationGateway) Stop(ctx context.Context) error {
 	// Stop capability sync.
 	if g.capSync != nil {
 		g.capSync.Stop()
+	}
+
+	// Stop alias sync.
+	if g.aliasSync != nil {
+		g.aliasSync.Stop()
 	}
 
 	// Unsubscribe all transport subscriptions.
@@ -473,6 +494,11 @@ func (g *FederationGateway) handleNodeRegister(data []byte) {
 	// discover nodes it missed. Also re-announce ourselves to the new peer.
 	if isNewNode {
 		g.propagateKnownNodes(ctx, payload.NodeId)
+
+		// Exchange alias snapshot alongside capability sync during federation handshake.
+		if g.aliasSync != nil {
+			g.aliasSync.SendSnapshot(ctx)
+		}
 	}
 }
 

@@ -16,9 +16,10 @@ import (
 // DiscoveryHandler subscribes to agent.discovery.request events and publishes
 // agent.discovery.response events with matching agents.
 type DiscoveryHandler struct {
-	bus      eventbus.EventBus
-	registry registry.AgentRegistry
-	nodeID   string
+	bus           eventbus.EventBus
+	registry      registry.AgentRegistry
+	nodeID        string
+	aliasRegistry registry.AliasRegistry // optional; enables alias-based fallback discovery
 }
 
 // NewDiscoveryHandler creates a new DiscoveryHandler.
@@ -28,6 +29,12 @@ func NewDiscoveryHandler(bus eventbus.EventBus, reg registry.AgentRegistry, node
 		registry: reg,
 		nodeID:   nodeID,
 	}
+}
+
+// SetAliasRegistry injects an alias registry for fallback capability discovery.
+// When set, queries with no direct matches will be resolved via aliases.
+func (h *DiscoveryHandler) SetAliasRegistry(ar registry.AliasRegistry) {
+	h.aliasRegistry = ar
 }
 
 // Start subscribes to agent.discovery.request events.
@@ -55,6 +62,27 @@ func (h *DiscoveryHandler) handleDiscoveryRequest(ctx context.Context, evt *even
 	if err != nil {
 		return h.publishError(ctx, evt.SourceAgent, "DISCOVERY_FAILED",
 			fmt.Sprintf("registry query failed: %v", err))
+	}
+
+	// Alias fallback: when no direct match found and an alias registry is configured,
+	// resolve equivalent capability names and search for agents with those names.
+	if len(agents) == 0 && h.aliasRegistry != nil {
+		equivalents, resolveErr := h.aliasRegistry.Resolve(ctx, payload.CapabilityName)
+		if resolveErr == nil {
+			seen := map[string]struct{}{payload.CapabilityName: {}}
+			for _, equiv := range equivalents {
+				if _, already := seen[equiv]; already {
+					continue
+				}
+				seen[equiv] = struct{}{}
+				aliasAgents, findErr := h.registry.FindByCapability(ctx, equiv, payload.VersionConstraint)
+				if findErr == nil {
+					agents = append(agents, aliasAgents...)
+				}
+			}
+			// Deduplicate by AgentID.
+			agents = deduplicateByAgentID(agents)
+		}
 	}
 
 	matches := make([]*protocolv1.AgentCapabilityMatch, len(agents))
@@ -97,6 +125,20 @@ func (h *DiscoveryHandler) handleDiscoveryRequest(ctx context.Context, evt *even
 		Timestamp:     time.Now().UnixNano(),
 		Payload:       data,
 	})
+}
+
+// deduplicateByAgentID removes duplicate agent registrations keeping the first occurrence.
+func deduplicateByAgentID(agents []registry.AgentRegistration) []registry.AgentRegistration {
+	seen := make(map[string]struct{}, len(agents))
+	result := agents[:0]
+	for _, a := range agents {
+		if _, ok := seen[a.AgentID]; ok {
+			continue
+		}
+		seen[a.AgentID] = struct{}{}
+		result = append(result, a)
+	}
+	return result
 }
 
 func (h *DiscoveryHandler) publishError(ctx context.Context, agentID, code, message string) error {
