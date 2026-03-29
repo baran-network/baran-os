@@ -19,8 +19,9 @@ const catalogBucketName = "capability-catalog"
 
 // KVRegistry implements AgentRegistry backed by JetStream KV.
 type KVRegistry struct {
-	kv      jetstream.KeyValue
-	catalog taxonomy.Catalog
+	kv        jetstream.KeyValue
+	catalogKV jetstream.KeyValue // non-nil when taxonomy catalog is active
+	catalog   taxonomy.Catalog
 	// Thresholds for state transitions.
 	UnhealthyThreshold int32
 	DeadThreshold      int32
@@ -70,7 +71,8 @@ func newKVRegistry(ctx context.Context, nc *nats.Conn, unhealthyThreshold, deadT
 	return r, nil
 }
 
-// seedCatalog creates the capability-catalog KV bucket and seeds it with standard entries.
+// seedCatalog creates the capability-catalog KV bucket, seeds it with standard entries,
+// and stores the KV reference in r.catalogKV for later vendor capability writes.
 func (r *KVRegistry) seedCatalog(ctx context.Context, js jetstream.JetStream, cat taxonomy.Catalog) error {
 	catalogKV, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
 		Bucket:  catalogBucketName,
@@ -80,6 +82,7 @@ func (r *KVRegistry) seedCatalog(ctx context.Context, js jetstream.JetStream, ca
 	if err != nil {
 		return fmt.Errorf("create catalog KV bucket: %w", err)
 	}
+	r.catalogKV = catalogKV
 
 	for _, entry := range cat.Query("*.*") {
 		data, err := json.Marshal(entry)
@@ -112,6 +115,15 @@ func (r *KVRegistry) Register(ctx context.Context, reg AgentRegistration) (uint6
 			if err := r.catalog.Validate(cap.Name); err != nil {
 				return 0, fmt.Errorf("%w: %v", ErrValidation, err)
 			}
+
+			isVendor := r.catalog.Lookup(cap.Name) == nil
+			if isVendor {
+				// Vendor capabilities require explicit input_types and output_types (schema required).
+				if len(cap.InputTypes) == 0 || len(cap.OutputTypes) == 0 {
+					return 0, fmt.Errorf("%w: vendor capability %q requires input_types and output_types to be specified", ErrValidation, cap.Name)
+				}
+			}
+
 			// Auto-map category/action/types from catalog for standard capabilities.
 			tc := taxonomy.Capability{
 				Name:        cap.Name,
@@ -135,6 +147,11 @@ func (r *KVRegistry) Register(ctx context.Context, reg AgentRegistration) (uint6
 				Action:      tc.Action,
 				InputTypes:  tc.InputTypes,
 				OutputTypes: tc.OutputTypes,
+			}
+
+			// Store vendor capabilities in capability-catalog KV for discoverability.
+			if isVendor && r.catalogKV != nil {
+				r.storeVendorCapability(ctx, reg.Capabilities[i])
 			}
 		}
 	}
@@ -418,6 +435,28 @@ func matchGlob(pattern, name string) (bool, error) {
 		return pattern == name, nil
 	}
 	return globMatch(pattern, name), nil
+}
+
+// storeVendorCapability persists a vendor capability entry in the capability-catalog KV bucket.
+// Uses Put (upsert) so re-registrations with updated types are reflected.
+func (r *KVRegistry) storeVendorCapability(ctx context.Context, cap Capability) {
+	entry := taxonomy.TaxonomyEntry{
+		Name:           cap.Name,
+		Description:    cap.Description,
+		InputTypes:     append([]string(nil), cap.InputTypes...),
+		OutputTypes:    append([]string(nil), cap.OutputTypes...),
+		CatalogVersion: "vendor",
+	}
+	// Derive category and action from dot-notation name for discoverability.
+	if idx := strings.Index(cap.Name, "."); idx >= 0 {
+		entry.Category = cap.Name[:idx]
+		entry.Action = cap.Name[idx+1:]
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return // best-effort; registration itself has already succeeded
+	}
+	_, _ = r.catalogKV.Put(ctx, cap.Name, data)
 }
 
 // globMatch implements simple glob: * matches any sequence (including dots), ? matches one char.

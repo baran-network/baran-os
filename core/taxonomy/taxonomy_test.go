@@ -2,6 +2,7 @@ package taxonomy_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/baran-network/baran-os/core/registry"
@@ -149,6 +150,179 @@ func TestFullCatalogQuery(t *testing.T) {
 	all := cat.Query("*.*")
 	if len(all) != 48 {
 		t.Errorf("expected 48 standard catalog entries, got %d", len(all))
+	}
+}
+
+// --- US2: Vendor Capabilities ---
+
+// TestVendorCapabilityRegistration verifies that vendor-namespaced capabilities
+// can be registered when they include input_types and output_types.
+func TestVendorCapabilityRegistration(t *testing.T) {
+	reg := newTaxonomyRegistry(t)
+	ctx := context.Background()
+
+	_, err := reg.Register(ctx, registry.AgentRegistration{
+		AgentID:   "agent-vendor-001",
+		AgentType: "risk-agent",
+		Version:   "1.0.0",
+		Capabilities: []registry.Capability{
+			{
+				Name:        "acme.wildfire.risk_assessment",
+				Version:     "1.0.0",
+				InputTypes:  []string{"application/json"},
+				OutputTypes: []string{"application/json"},
+			},
+		},
+		NodeID: "node-1",
+	})
+	if err != nil {
+		t.Fatalf("register vendor agent: %v", err)
+	}
+
+	// Exact match.
+	exact, err := reg.FindByCapability(ctx, "acme.wildfire.risk_assessment", "")
+	if err != nil {
+		t.Fatalf("find by exact vendor capability: %v", err)
+	}
+	if len(exact) != 1 || exact[0].AgentID != "agent-vendor-001" {
+		t.Errorf("unexpected exact matches: %+v", exact)
+	}
+
+	// Glob match: acme.wildfire.* should return the agent.
+	glob, err := reg.FindByCapability(ctx, "acme.wildfire.*", "")
+	if err != nil {
+		t.Fatalf("find by vendor glob capability: %v", err)
+	}
+	if len(glob) != 1 || glob[0].AgentID != "agent-vendor-001" {
+		t.Errorf("unexpected glob matches: %+v", glob)
+	}
+
+	// Broader glob: acme.* should also match.
+	broader, err := reg.FindByCapability(ctx, "acme.*", "")
+	if err != nil {
+		t.Fatalf("find by broader vendor glob: %v", err)
+	}
+	if len(broader) != 1 {
+		t.Errorf("expected 1 match for acme.*, got %d", len(broader))
+	}
+}
+
+// TestVendorCapabilityRequiresSchema verifies that vendor capabilities missing
+// input_types or output_types are rejected at registration.
+func TestVendorCapabilityRequiresSchema(t *testing.T) {
+	reg := newTaxonomyRegistry(t)
+	ctx := context.Background()
+
+	cases := []struct {
+		name        string
+		capability  registry.Capability
+		expectError string
+	}{
+		{
+			name:        "missing_both",
+			capability:  registry.Capability{Name: "acme.wildfire.risk_assessment", Version: "1.0.0"},
+			expectError: "input_types and output_types",
+		},
+		{
+			name: "missing_output",
+			capability: registry.Capability{
+				Name:       "acme.wildfire.risk_assessment",
+				Version:    "1.0.0",
+				InputTypes: []string{"application/json"},
+			},
+			expectError: "input_types and output_types",
+		},
+		{
+			name: "missing_input",
+			capability: registry.Capability{
+				Name:        "acme.wildfire.risk_assessment",
+				Version:     "1.0.0",
+				OutputTypes: []string{"application/json"},
+			},
+			expectError: "input_types and output_types",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := reg.Register(ctx, registry.AgentRegistration{
+				AgentID:      "agent-noschema-" + tc.name,
+				AgentType:    "test-agent",
+				Version:      "1.0.0",
+				Capabilities: []registry.Capability{tc.capability},
+				NodeID:       "node-1",
+			})
+			if err == nil {
+				t.Error("expected error for vendor capability without schema, got nil")
+				return
+			}
+			if !strings.Contains(err.Error(), tc.expectError) {
+				t.Errorf("expected error containing %q, got: %v", tc.expectError, err)
+			}
+		})
+	}
+}
+
+// TestVendorCapabilityInvalidNamespace verifies that invalid vendor namespace names
+// are rejected at registration.
+func TestVendorCapabilityInvalidNamespace(t *testing.T) {
+	reg := newTaxonomyRegistry(t)
+	ctx := context.Background()
+
+	cases := []struct {
+		name       string
+		capability string
+	}{
+		// Single segment — must have ≥2 dot-separated parts.
+		{"single_segment", "custom_thing"},
+		// First segment is a reserved standard category — ambiguous.
+		{"reserved_category_prefix", "nlp.nonexistent_action"},
+		// Standard category as first segment with multi-level — still reserved.
+		{"reserved_category_deep", "code.nonexistent.action"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := reg.Register(ctx, registry.AgentRegistration{
+				AgentID:   "agent-invalid-" + tc.name,
+				AgentType: "test-agent",
+				Version:   "1.0.0",
+				Capabilities: []registry.Capability{
+					{
+						Name:        tc.capability,
+						Version:     "1.0.0",
+						InputTypes:  []string{"application/json"},
+						OutputTypes: []string{"application/json"},
+					},
+				},
+				NodeID: "node-1",
+			})
+			if err == nil {
+				t.Errorf("expected error registering with %q, got nil", tc.capability)
+			}
+		})
+	}
+}
+
+// TestVendorCapabilityIsDetectedByValidator verifies the Validator.IsVendor helper.
+func TestVendorCapabilityIsDetectedByValidator(t *testing.T) {
+	cat := taxonomy.NewStandardCatalog()
+	v := taxonomy.NewValidator(cat)
+
+	if !v.IsVendor("acme.wildfire.risk_assessment") {
+		t.Error("expected acme.wildfire.risk_assessment to be detected as vendor")
+	}
+	if !v.IsVendor("betacorp.nlp.custom") {
+		t.Error("expected betacorp.nlp.custom to be detected as vendor")
+	}
+	if v.IsVendor("nlp.summarization") {
+		t.Error("expected nlp.summarization to NOT be vendor (standard capability)")
+	}
+	if v.IsVendor("custom_thing") {
+		t.Error("expected custom_thing to NOT be vendor (invalid namespace)")
+	}
+	if v.IsVendor("nlp.nonexistent") {
+		t.Error("expected nlp.nonexistent to NOT be vendor (reserved category prefix)")
 	}
 }
 

@@ -23,3 +23,10 @@ func (v *Validator) Validate(capabilityName string) error {
 func (v *Validator) AutoMap(cap *Capability) error {
 	return v.catalog.AutoMap(cap)
 }
+
+// IsVendor returns true if capabilityName is a valid vendor capability:
+// it passes namespace validation but is not in the standard catalog.
+// Returns false if the name is invalid or is a standard capability.
+func (v *Validator) IsVendor(capabilityName string) bool {
+	return v.catalog.Lookup(capabilityName) == nil && v.catalog.Validate(capabilityName) == nil
+}
