@@ -13,7 +13,7 @@ type AgentRegistration struct {
 	LastSeen         time.Time
 	MissedHeartbeats int32
 	NodeID           string
-	Origin           string // "local" or "remote"
+	Origin           string // "local", "remote", or "a2a"
 	Revision         uint64
 }
 
@@ -22,10 +22,20 @@ func (r AgentRegistration) IsRemote() bool {
 	return r.Origin == "remote"
 }
 
+// IsA2A returns true if this registration represents an external A2A agent.
+func (r AgentRegistration) IsA2A() bool {
+	return r.Origin == "a2a"
+}
+
 // Capability represents a declared ability of an agent.
 type Capability struct {
 	Name        string
 	Version     string
 	Description string
 	Parameters  map[string]string
+	// Taxonomy fields (Phase 9). Auto-populated for standard capabilities.
+	Category    string
+	Action      string
+	InputTypes  []string
+	OutputTypes []string
 }

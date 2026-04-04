@@ -19,6 +19,7 @@ import (
 	"github.com/baran-network/baran-os/core/registry"
 	"github.com/baran-network/baran-os/core/router"
 	"github.com/baran-network/baran-os/core/simulation"
+	"github.com/baran-network/baran-os/core/taxonomy"
 	"github.com/baran-network/baran-os/core/workflow"
 	"github.com/google/uuid"
 	natsserver "github.com/nats-io/nats-server/v2/server"
@@ -233,8 +234,8 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	r.setSubsystemStatus("eventbus", "up")
 	log.Info("subsystem started", "component", "eventbus")
 
-	// Agent Registry
-	reg, err := registry.NewKVRegistry(ctx, r.natsConn, r.config.UnhealthyThreshold, r.config.DeadThreshold)
+	// Agent Registry (with standard taxonomy catalog for capability validation)
+	reg, err := registry.NewKVRegistryWithCatalog(ctx, r.natsConn, r.config.UnhealthyThreshold, r.config.DeadThreshold, taxonomy.NewStandardCatalog())
 	if err != nil {
 		r.shutdown(ctx)
 		return fmt.Errorf("registry: %w", err)
