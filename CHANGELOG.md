@@ -5,6 +5,35 @@ All notable changes to Baran OS will be documented in this file.
 This project uses [Semantic Versioning](https://semver.org/) with per-module Go tags
 (`protocol/v0.1.0`, `core/v0.1.0`, `sdk/v0.1.0`).
 
+## [v0.7.0] — 2026-04-05
+
+### LLM Agent Example (`examples/coding/`)
+
+- **Multi-agent coding workflow**: Three Python LLM agents (analyst, generator, reviewer)
+  collaborate in a sequential workflow — task analysis → code generation → code review.
+  Demonstrates Baran OS as an orchestration layer for LLM pipelines.
+- **Sidecar Gateway integration**: Python agents connect via HTTP/SSE using the Python SDK
+  (`baran-sdk`), with no NATS or protobuf dependency. Agents register, subscribe to events,
+  and publish results entirely through the REST API.
+- **Dual LLM provider support**: Agents support both Anthropic Claude and OpenAI GPT-4o via
+  environment variable (`LLM_PROVIDER`). Provider selection is runtime-configurable.
+- **LangGraph + MCP tool access**: The code generator agent uses a LangGraph ReAct loop with
+  an MCP filesystem server for reading project files during generation. Graceful fallback to
+  a direct LLM call if MCP is unavailable.
+- **Go trigger**: Connects directly to NATS, creates a 3-step workflow using capability-based
+  dispatch (`code.analysis` → `code.generation` → `code.review`), and displays the
+  aggregated result with analysis, generated code, and review feedback.
+
+### Documentation
+
+- New [LLM Agent Example guide](docs/guide/llm-agent-example.md) covering architecture,
+  quick start, agent design pattern, MCP integration, and configuration reference
+- Updated sidebar navigation with LLM Agent Example entry
+- `examples/coding/README.md` with full setup instructions, file structure, and
+  troubleshooting guide
+
+---
+
 ## [v0.5.0] — 2026-03-25
 
 ### Sidecar Gateway (`sidecar/`)
