@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package agentosprotocol.v1;
+
+option go_package = "github.com/baran-network/baran-os/protocol/gen/go/agentosprotocol/v1;protocolv1";
+
+import "agentosprotocol/v1/discovery.proto";
+
+// TaxonomyCategory represents a top-level capability grouping.
+message TaxonomyCategory {
+  string name = 1;
+  string description = 2;
+}
+
+// TaxonomyEntry represents a single well-known capability in the standard catalog.
+message TaxonomyEntry {
+  string name = 1;                    // Full dot-notation (e.g., "nlp.summarization")
+  string category = 2;                // Parent category (e.g., "nlp")
+  string action = 3;                  // Specific action (e.g., "summarization")
+  string description = 4;
+  repeated string input_types = 5;
+  repeated string output_types = 6;
+  string catalog_version = 7;
+}
+
+// TaxonomyCatalog contains the full standard capability catalog.
+message TaxonomyCatalog {
+  string version = 1;
+  repeated TaxonomyCategory categories = 2;
+  repeated TaxonomyEntry entries = 3;
+}
+
+// AliasMapping defines equivalence between two capability names.
+message AliasMapping {
+  string id = 1;
+  string source = 2;
+  string target = 3;
+  string node_id = 4;
+  int64 created_at = 5;
+}
+
+// AliasRegistrySnapshot is the full set of aliases for federation sync.
+message AliasRegistrySnapshot {
+  string node_id = 1;
+  repeated AliasMapping aliases = 2;
+}
+
+// TaxonomyQueryRequest for hierarchical capability discovery.
+message TaxonomyQueryRequest {
+  string pattern = 1;       // e.g., "nlp.*" or "nlp.summarization"
+  bool include_vendor = 2;  // Include vendor capabilities in results
+}
+
+// TaxonomyQueryResponse returns matching capabilities and agents.
+message TaxonomyQueryResponse {
+  repeated TaxonomyEntry catalog_matches = 1;
+  repeated AgentCapabilityMatch agent_matches = 2;
+}

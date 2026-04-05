@@ -45,6 +45,11 @@ type Capability struct {
 	Version     string
 	Description string
 	Parameters  map[string]string
+	// Taxonomy fields (Phase 9). Auto-populated by the runtime for standard capabilities.
+	Category    string
+	Action      string
+	InputTypes  []string
+	OutputTypes []string
 }
 
 // capabilityEntry pairs a Capability with its registered handler.

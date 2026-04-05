@@ -146,6 +146,40 @@ func main() {
 
 The SDK handles connection, registration, capability announcement, health pings, step dispatch, idempotency, and graceful shutdown.
 
+### Capability Taxonomy
+
+Baran OS ships with 48 well-known capabilities across 8 categories (`nlp`, `code`, `vision`, `data`, `decision`, `communication`, `orchestration`, `security`). Capabilities follow dot-notation: `nlp.summarization`, `code.generation`.
+
+When an agent registers a standard capability, the registry auto-fills its category, input types, and output types from the catalog. Discovery supports glob patterns — `nlp.*` returns all NLP agents. Agents can also register vendor-namespaced capabilities (`acme.wildfire.risk_assessment`) when no standard entry fits.
+
+Federated nodes can define **capability aliases** to map equivalent vendor capabilities across organizations, enabling cross-node discovery without requiring identical naming.
+
+See the [Capability Taxonomy guide](https://baran-network.github.io/baran-os/#/guide/taxonomy) for the full catalog and vendor namespace rules.
+
+### A2A Gateway — Interoperability with External Agents
+
+The **A2A Gateway** bridges [Google's A2A protocol](https://google.github.io/A2A/) to the Baran OS network:
+
+```bash
+# Start the A2A gateway
+baran-a2a --nats-url nats://localhost:4222 --a2a-port 8090 --psk my-secret
+
+# External A2A clients discover Baran agents
+curl http://localhost:8090/.well-known/agent-card.json
+
+# External A2A clients invoke Baran agents via JSON-RPC 2.0
+curl -X POST http://localhost:8090/ \
+  -H "Authorization: Bearer my-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"message/send","id":"1",
+       "params":{"message":{"role":"user","parts":[{"text":"..."}]},
+                 "configuration":{"skill":"nlp.summarization"}}}'
+```
+
+External A2A agents can also be onboarded into Baran — the gateway fetches their Agent Cards, maps skills to the Baran taxonomy, and registers them as virtual participants so Baran workflows dispatch to them transparently.
+
+See the [A2A Gateway guide](https://baran-network.github.io/baran-os/#/guide/a2a-gateway) for details.
+
 ### Sidecar Gateway — Any Language
 
 Agents written in any language can join the network via the **Sidecar Gateway**, which translates between HTTP/JSON and the native NATS/protobuf protocol:
@@ -191,6 +225,9 @@ baran-os/
 │   └── registry/       Agent and capability registry (KV-backed)
 ├── sidecar/            Sidecar Gateway (REST/SSE/WebSocket → NATS/protobuf)
 │   └── cmd/baran-sidecar/  Sidecar binary entrypoint
+├── a2a/                A2A Gateway core package
+│   └── cmd/baran-a2a/  A2A Gateway binary entrypoint
+├── core/taxonomy/      Capability taxonomy (48 standard entries, vendor validation)
 ├── sdk/                Go SDK for building agents
 ├── sdks/               External language SDKs
 │   ├── python/         Python SDK (baran-sdk)
@@ -202,7 +239,7 @@ baran-os/
 
 ## Status
 
-Baran OS **v0.5.0** adds the Sidecar Gateway for multi-language agent support, plus Python and TypeScript SDKs.
+Baran OS **v0.6.0** adds the Capability Taxonomy (48 well-known capabilities, vendor namespaces, federation aliases) and the A2A Gateway for interoperability with external A2A agents.
 See the full [changelog](CHANGELOG.md) and the [documentation site](https://baran-network.github.io/baran-os/).
 
 **What works today:**

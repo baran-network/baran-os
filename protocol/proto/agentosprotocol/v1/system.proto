@@ -10,6 +10,11 @@ message Capability {
   string version = 2;
   string description = 3;
   map<string, string> parameters = 4;
+  // Taxonomy extensions (Phase 9)
+  string category = 5;
+  string action = 6;
+  repeated string input_types = 7;
+  repeated string output_types = 8;
 }
 
 // AgentRegisterPayload is the payload for agent.register events.
