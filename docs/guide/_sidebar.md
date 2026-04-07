@@ -9,6 +9,7 @@
 - [A2A Gateway](a2a-gateway.md)
 - [Event Replay & Simulation](simulation.md)
 - [LLM Agent Example](llm-agent-example.md)
+- [Operator UI](operator-ui.md)
 - [Event Catalog](event-catalog.md)
 - [Project Structure](project-structure.md)
 

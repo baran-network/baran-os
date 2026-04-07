@@ -4,7 +4,7 @@
 
 Named after [Paul Baran](https://en.wikipedia.org/wiki/Paul_Baran), pioneer of distributed networks, Baran OS is an event-driven runtime where autonomous agents — AI-powered or not — discover each other, collaborate through typed events, and execute multi-step workflows without ever communicating directly.
 
-[![Version](https://img.shields.io/badge/version-v0.5.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.8.0-blue)](CHANGELOG.md)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![NATS](https://img.shields.io/badge/NATS-JetStream-27AAE1?logo=nats.io&logoColor=white)](https://nats.io)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -86,6 +86,7 @@ Agents connect to the runtime, register their capabilities, and receive workflow
 
 - Go 1.22+
 - Port 4222 free (embedded NATS)
+- Node.js 24+ (for the Operator UI)
 
 ### Build and run the runtime
 
@@ -97,6 +98,20 @@ make build
 ```
 
 The runtime starts an embedded NATS server on `:4222` and a health endpoint on `:8080`.
+
+### Start the Operator UI
+
+```bash
+cd ui
+cp .env.example .env.local
+# Edit .env.local — set BARAN_RUNTIME_URL=http://localhost:8080 and BARAN_UI_TOKEN
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to access the network dashboard.
+
+See the [Operator UI guide](https://baran-network.github.io/baran-os/#/guide/operator-ui) for full documentation.
 
 ### Run the wildfire example
 
@@ -239,7 +254,7 @@ baran-os/
 
 ## Status
 
-Baran OS **v0.6.0** adds the Capability Taxonomy (48 well-known capabilities, vendor namespaces, federation aliases) and the A2A Gateway for interoperability with external A2A agents.
+Baran OS **v0.8.0** adds the Operator UI — a real-time web dashboard for monitoring and managing the agent network.
 See the full [changelog](CHANGELOG.md) and the [documentation site](https://baran-network.github.io/baran-os/).
 
 **What works today:**
@@ -258,11 +273,9 @@ See the full [changelog](CHANGELOG.md) and the [documentation site](https://bara
 - Go SDK for building agents
 - End-to-end wildfire example (single-node, multi-node federation, and simulation scenarios)
 - Documentation site with quickstart, SDK reference, event catalog, federation guide, sidecar gateway guide, and simulation guide
+- **Operator UI** (`ui/`) — real-time Next.js dashboard: network dashboard, event flow monitor, federation graph, visual simulator, and human decisions panel
 
 **What's coming:**
-- Capability taxonomy and A2A (Agent-to-Agent) gateway for cross-platform interoperability
-- LLM agent example — autonomous coding workflow with LangGraph integration
-- Operator UI — network dashboard, federation view, and visual simulator
 - Distribution — goreleaser binaries, container images, and SDK packages
 
 ## Development
