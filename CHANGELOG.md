@@ -5,6 +5,33 @@ All notable changes to Baran OS will be documented in this file.
 This project uses [Semantic Versioning](https://semver.org/) with per-module Go tags
 (`protocol/v0.1.0`, `core/v0.1.0`, `sdk/v0.1.0`).
 
+## [v0.8.0] — 2026-04-06
+
+### Operator UI (`ui/`)
+
+- **Network Dashboard** (`/dashboard`): real-time agent table with health status badges, capability filters, sortable columns, A2A origin badge, and slide-out detail panel (Info, Capabilities by taxonomy category, Resources, Live Events per agent). Summary panel shows aggregate stats with 5s polling.
+- **Event Flow Monitor** (`/events`): live SSE event stream with virtualized scrolling (`@tanstack/react-virtual`), ring buffer (10,000 cap), `requestAnimationFrame` batching (100 events/frame), pause/resume with background buffering, high-traffic indicator, and workflow timeline tab.
+- **Federation View** (`/federation`): interactive React Flow graph with custom cluster nodes (expand/collapse), relay edges colored by status, cluster detail panel (agents, capabilities, aliases), and friendly empty state for non-federated setups.
+- **Visual Simulator** (`/simulator`): event replay at 1x/2x/5x/10x/Max speed, scenario list with run button and live progress, manual event injection with JSON payload editor. All simulation events visually distinguished with `[SIM]` badge and pink border.
+- **Human Decisions** (`/decisions`): pending decision cards with approve/reject, comment field, conflict grouping, and real-time SSE delivery. History tab for resolved decisions.
+- **Shared infrastructure**: SSE connection manager with auto-reconnect and `Last-Event-ID` recovery, connection status indicator (green/yellow/red), reconnection banner, sidebar navigation with pending decision badge.
+
+### Backend Operator API (`core/runtime/operator_handler.go`)
+
+- `GET /api/agents`, `GET /api/agents/{id}` — reads from `agent-registry` KV
+- `GET /api/workflows`, `GET /api/workflows/{id}` — reads from `workflow-state` KV
+- `GET /api/capabilities` — reads from `capability-catalog` KV
+- `GET /api/stats` — computed aggregate stats
+- `GET /api/events/stream` — SSE with wildcard JetStream subscribe, `Last-Event-ID` recovery, gap markers, and 30s keepalive
+
+### Documentation
+
+- New [Operator UI guide](docs/guide/operator-ui.md) covering all views, architecture, environment variables, and performance targets
+- Updated sidebar navigation with Operator UI entry
+- `README.md` updated with v0.8.0, UI setup instructions, and updated status section
+
+---
+
 ## [v0.7.0] — 2026-04-05
 
 ### LLM Agent Example (`examples/coding/`)

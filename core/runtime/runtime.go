@@ -397,6 +397,21 @@ func (r *Runtime) startSubsystems(ctx context.Context) error {
 	scenarioHandler.RegisterRoutes(r.httpMux)
 	log.Info("subsystem started", "component", "simulation")
 
+	// Operator API — read-only REST + global SSE event stream for the Operator UI.
+	operatorHandler := NewOperatorHandler(
+		reg,
+		store,
+		taxonomy.NewStandardCatalog(),
+		engine.Coordinator(),
+		gw,
+		natsbus.JetStream(),
+		r.nodeID,
+		r.logger,
+	)
+	operatorHandler.RegisterRoutes(r.httpMux)
+	operatorHandler.Start(ctx)
+	log.Info("subsystem started", "component", "operator-api")
+
 	return nil
 }
 
