@@ -82,24 +82,46 @@ Agents connect to the runtime, register their capabilities, and receive workflow
 
 ## Getting Started
 
-### Prerequisites
+### Quickstart (recommended) — `make demo`
 
-- Go 1.22+
-- Port 4222 free (embedded NATS)
-- Node.js 24+ (for the Operator UI)
+The fastest way to see Baran alive is the **hello-baran** local demo: a
+one-command Docker stack that builds the runtime, sidecar, operator UI, and
+two heterogeneous agents (Go + Python), then runs a 2-step workflow
+dispatched by capability. Fully offline, no API keys, no LLMs.
 
-### Build and run the runtime
+**Prerequisites**: Docker (with `docker compose` v2) and GNU Make. That's it.
 
 ```bash
 git clone https://github.com/baran-network/baran-os.git
 cd baran-os
+make demo                    # builds images and boots the stack
+open http://localhost:3000   # operator UI — see the workflow run live
+make demo-down               # tear everything down
+```
+
+See [`examples/hello-baran/README.md`](examples/hello-baran/README.md) for a
+walk-through of what each component does and what to look for in the UI.
+
+### Advanced examples
+
+For richer end-to-end demos, see [`examples/wildfire/`](examples/wildfire/)
+(multi-agent emergency response with human-in-loop) and
+[`examples/coding/`](examples/coding/) (autonomous LangGraph coding agent).
+
+### Manual setup (without Docker)
+
+If you prefer to run the components by hand:
+
+**Prerequisites**: Go 1.22+, port 4222 free, Node.js 24+ for the operator UI.
+
+```bash
 make build
 ./baran
 ```
 
 The runtime starts an embedded NATS server on `:4222` and a health endpoint on `:8080`.
 
-### Start the Operator UI
+Then start the operator UI:
 
 ```bash
 cd ui

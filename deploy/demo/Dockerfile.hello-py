@@ -1,0 +1,8 @@
+FROM python:3.10-slim
+WORKDIR /app
+COPY sdks/python /sdks/python
+COPY examples/hello-baran/agents/reverser/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+COPY examples/hello-baran/agents/reverser/main.py ./main.py
+ENV PYTHONUNBUFFERED=1
+CMD ["python", "main.py"]

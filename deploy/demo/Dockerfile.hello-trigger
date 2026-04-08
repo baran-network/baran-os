@@ -1,0 +1,17 @@
+FROM golang:1.26-alpine AS build
+RUN apk add --no-cache git
+WORKDIR /src
+COPY go.work go.work.sum ./
+COPY core/   ./core/
+COPY protocol/ ./protocol/
+COPY sdk/    ./sdk/
+COPY sidecar/ ./sidecar/
+COPY a2a/    ./a2a/
+COPY cmd/    ./cmd/
+COPY examples/ ./examples/
+RUN cd examples/hello-baran && go build -o /out/hello-trigger ./trigger
+
+FROM alpine:3.20
+COPY --from=build /out/hello-trigger /usr/local/bin/hello-trigger
+COPY examples/hello-baran/workflow/hello.json /etc/hello-baran/hello.json
+ENTRYPOINT ["/usr/local/bin/hello-trigger", "-workflow=/etc/hello-baran/hello.json"]

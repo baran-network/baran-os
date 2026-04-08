@@ -1,0 +1,18 @@
+{
+  "name": "hello-baran",
+  "initiator": "hello-trigger",
+  "steps": [
+    {
+      "name": "step-1-uppercase",
+      "capability": "text.uppercase",
+      "timeout_seconds": 10,
+      "input": { "text": "hello baran" }
+    },
+    {
+      "name": "step-2-reverse",
+      "capability": "text.reverse",
+      "timeout_seconds": 10,
+      "input": { "text": "hello baran" }
+    }
+  ]
+}

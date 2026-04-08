@@ -1,0 +1,16 @@
+FROM golang:1.26-alpine AS build
+RUN apk add --no-cache git
+WORKDIR /src
+COPY go.work go.work.sum ./
+COPY core/   ./core/
+COPY protocol/ ./protocol/
+COPY sdk/    ./sdk/
+COPY sidecar/ ./sidecar/
+COPY a2a/    ./a2a/
+COPY cmd/    ./cmd/
+COPY examples/ ./examples/
+RUN cd examples/hello-baran && go build -o /out/hello-uppercaser ./agents/uppercaser
+
+FROM alpine:3.20
+COPY --from=build /out/hello-uppercaser /usr/local/bin/hello-uppercaser
+ENTRYPOINT ["/usr/local/bin/hello-uppercaser"]

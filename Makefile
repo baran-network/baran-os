@@ -1,4 +1,14 @@
-.PHONY: proto test test-race test-sdk dev lint fmt check clean build
+.PHONY: proto test test-race test-sdk dev lint fmt check clean build demo demo-down demo-smoke
+
+demo:
+	scripts/demo/up.sh
+
+demo-down:
+	scripts/demo/down.sh
+
+demo-smoke:
+	scripts/demo/smoke.sh
+
 
 proto:
 	buf generate

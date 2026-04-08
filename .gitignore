@@ -64,4 +64,5 @@ baran-data/
 /baran
 core/baran
 sidecar/baran-sidecar
-trigger
+/trigger
+!examples/hello-baran/trigger/

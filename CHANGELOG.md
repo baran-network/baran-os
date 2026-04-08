@@ -250,6 +250,23 @@ This project uses [Semantic Versioning](https://semver.org/) with per-module Go 
 
 ## [Unreleased]
 
+### Examples & local demo (spec 018, Phase 11.5)
+
+- **`hello-baran` example** (`examples/hello-baran/`): minimal evaluation demo
+  with two heterogeneous agents (Go native `uppercaser` + Python via sidecar
+  `reverser`) and a 2-step workflow dispatched by capability
+  (`text.uppercase` → `text.reverse`). Fully offline, no API keys, no LLMs.
+- **One-command local stack**: `make demo` / `make demo-down` / `make demo-smoke`
+  boot a full Compose stack (runtime, sidecar, operator UI, two agents, trigger)
+  backed by `deploy/demo/docker-compose.yml` and `scripts/demo/{up,down,smoke}.sh`.
+  Port-conflict preflight, healthcheck-ordered startup, clean `-v` teardown.
+- **CI smoke test**: new `.github/workflows/demo-smoke.yml` runs `make demo-smoke`
+  on PRs touching runtime, sidecar, SDKs, UI, or the demo stack; uploads
+  `demo-smoke-logs/` on failure. 5-minute job timeout.
+- **Docs**: new `examples/hello-baran/README.md` walk-through; root `README.md`
+  and `docs/guide/getting-started.md` now point to `make demo` as the canonical
+  first-run path, with wildfire/coding repositioned as advanced examples.
+
 ### Core (`core/`)
 
 - **Human-in-the-loop decisions**: workflow steps can require human approval via

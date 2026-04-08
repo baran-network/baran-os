@@ -1,0 +1,4 @@
+# hello-baran reverser — minimal Python dependencies (offline, no LLM).
+# Install the local Baran Python SDK (Phase 8 / spec 014). The Dockerfile copies
+# the SDK source tree to /sdks/python before running pip install.
+/sdks/python

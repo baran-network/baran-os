@@ -1,0 +1,24 @@
+# Multi-stage build of core/cmd/baran (the Baran runtime with embedded NATS).
+# Build context: repo root — needed because the build relies on the Go workspace
+# (go.work) to resolve cross-module replacements (core, protocol, sdk, ...).
+FROM golang:1.26-alpine AS build
+RUN apk add --no-cache git
+WORKDIR /src
+COPY go.work go.work.sum ./
+COPY core/   ./core/
+COPY protocol/ ./protocol/
+COPY sdk/    ./sdk/
+COPY sidecar/ ./sidecar/
+COPY a2a/    ./a2a/
+COPY cmd/    ./cmd/
+# Examples are required by go.work — copy minimally to keep the workspace valid.
+COPY examples/ ./examples/
+RUN cd core && go build -o /out/baran ./cmd/baran
+
+FROM alpine:3.20
+RUN apk add --no-cache wget ca-certificates
+WORKDIR /app
+COPY --from=build /out/baran /usr/local/bin/baran
+RUN mkdir -p /data
+EXPOSE 4222 8222 8080
+ENTRYPOINT ["/usr/local/bin/baran"]

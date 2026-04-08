@@ -1,6 +1,28 @@
 # Getting Started
 
-This guide takes you from zero to a running Baran OS runtime with the wildfire emergency example.
+This guide takes you from zero to a running Baran OS runtime.
+
+## Quickstart: `make demo`
+
+The fastest path is the **hello-baran** local demo. With only Docker and
+Make, one command builds the runtime, sidecar, operator UI, and two
+heterogeneous example agents (Go + Python) and runs a 2-step workflow
+dispatched by capability:
+
+```bash
+git clone https://github.com/baran-network/baran-os.git
+cd baran-os
+make demo                    # builds and boots the stack
+open http://localhost:3000   # operator UI — observe the workflow run
+make demo-down               # tear everything down
+```
+
+Fully offline, no API keys, no LLMs. See
+[`examples/hello-baran/README.md`](https://github.com/baran-network/baran-os/blob/main/examples/hello-baran/README.md)
+for a walk-through of the components and what to look for in the operator UI.
+
+The remainder of this guide covers the manual install path and the larger
+wildfire example.
 
 ## Prerequisites
 

@@ -1,0 +1,18 @@
+FROM golang:1.26-alpine AS build
+RUN apk add --no-cache git
+WORKDIR /src
+COPY go.work go.work.sum ./
+COPY core/   ./core/
+COPY protocol/ ./protocol/
+COPY sdk/    ./sdk/
+COPY sidecar/ ./sidecar/
+COPY a2a/    ./a2a/
+COPY cmd/    ./cmd/
+COPY examples/ ./examples/
+RUN cd sidecar && go build -o /out/baran-sidecar ./
+
+FROM alpine:3.20
+RUN apk add --no-cache wget ca-certificates
+COPY --from=build /out/baran-sidecar /usr/local/bin/baran-sidecar
+EXPOSE 9090
+ENTRYPOINT ["/usr/local/bin/baran-sidecar"]

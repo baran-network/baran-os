@@ -1,0 +1,124 @@
+# hello-baran local demo stack (spec 018).
+#
+# Deviation from contracts/compose-services.md: the standalone `nats` service
+# is omitted because the Baran runtime embeds NATS (see core/runtime). Its
+# JetStream port (4222) and monitoring port (8222) are published directly from
+# the `runtime` container. All other services (sidecar, operator-ui, the two
+# hello-baran agents, the trigger) match the contract.
+
+services:
+  runtime:
+    build:
+      context: ../..
+      dockerfile: deploy/demo/Dockerfile.runtime
+    container_name: hello-baran-runtime
+    command:
+      - "-nats-store-dir=/data"
+      - "-log-level=info"
+    ports:
+      - "4222:4222"   # NATS clients
+      - "8222:8222"   # NATS monitoring
+      - "8080:8080"   # runtime operator/health HTTP API
+    volumes:
+      - demo-nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 2s
+    restart: unless-stopped
+    networks: [demo]
+
+  sidecar:
+    build:
+      context: ../..
+      dockerfile: deploy/demo/Dockerfile.sidecar
+    container_name: hello-baran-sidecar
+    command:
+      - "-port=9090"
+      - "-nats-url=nats://runtime:4222"
+    ports:
+      - "9090:9090"
+    depends_on:
+      runtime:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 2s
+    restart: unless-stopped
+    networks: [demo]
+
+  operator-ui:
+    build:
+      context: ../..
+      dockerfile: deploy/demo/Dockerfile.operator-ui
+    container_name: hello-baran-ui
+    environment:
+      - NEXT_PUBLIC_BARAN_RUNTIME_URL=http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      runtime:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    restart: unless-stopped
+    networks: [demo]
+
+  hello-go:
+    build:
+      context: ../..
+      dockerfile: deploy/demo/Dockerfile.hello-go
+    container_name: hello-baran-go
+    environment:
+      - BARAN_NATS_URL=nats://runtime:4222
+    depends_on:
+      runtime:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [demo]
+
+  hello-py:
+    build:
+      context: ../..
+      dockerfile: deploy/demo/Dockerfile.hello-py
+    container_name: hello-baran-py
+    environment:
+      - BARAN_SIDECAR_URL=http://sidecar:9090
+    depends_on:
+      sidecar:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [demo]
+
+  hello-trigger:
+    build:
+      context: ../..
+      dockerfile: deploy/demo/Dockerfile.hello-trigger
+    container_name: hello-baran-trigger
+    environment:
+      - BARAN_NATS_URL=nats://runtime:4222
+    depends_on:
+      runtime:
+        condition: service_healthy
+      hello-go:
+        condition: service_started
+      hello-py:
+        condition: service_started
+    restart: "no"
+    networks: [demo]
+
+networks:
+  demo:
+    driver: bridge
+
+volumes:
+  demo-nats-data:
